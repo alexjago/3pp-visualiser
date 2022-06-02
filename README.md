@@ -1,3 +1,13 @@
+# 3PP Visualiser
+
+As 3PP contests become more relevant, a need arises for analysis tools.
+
+This repo contains a Python script to generate SVG graphs of 3PP contests, plus tooling to put it online.
+
+## Using the script
+
+Download and run `visualise.py`. There are no dependencies other than modern Python 3. 
+
 # README - WSGI
 
 This folder contains a WSGI application intended for use with uWSGI (`threeparty.py`), and corresponding configuration files.
