@@ -41,9 +41,20 @@ class Party(Enum):
 
 def p2c(blue_pct: float, green_pct: float, A: argparse.Namespace) -> Tuple[float, float]:
     '''Percentages to Coordinates'''
-    x = ((blue_pct - A.start) / (A.stop - A.start)) * A.inner_width + (A.offset)*A.scale
+
+    minX = A.offset * A.scale
+    maxX = A.width - A.scale
+
+    minY = A.width - minX
+    maxY = A.scale
+
+    x = ((blue_pct - A.start) / (A.stop - A.start)) * A.inner_width + minX
     y = A.inner_width * (1 - ((green_pct - A.start) / (A.stop - A.start))) + A.scale
-    return (x, y)
+
+    x = max(min(x, maxX), minX)
+    y = min(max(y, maxY), minY)
+
+    return (x,   y)
 
 
 def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argparse.Namespace) -> Tuple[Party, float]:
@@ -147,7 +158,7 @@ def draw_lines(A: argparse.Namespace) -> str:
     # (0.25, 0.25) at full Blue-to-Green
     
     # there's a line coming out of the terpoint that (at least for normal values) 
-    # A.marks out the "Greens 3CP >= Labor 3CP == Liberal 3CP" 
+    # marks out the "Greens 3CP >= Labor 3CP == Liberal 3CP" 
     #   1 - (g+b) = b
 
     # and another coming in from #1 that A.marks the Labor-Greens 2CP boundary
@@ -183,7 +194,7 @@ def draw_lines(A: argparse.Namespace) -> str:
     # Line #1-#2-#3 represents the Red/Green boundary
     red_green = f'M {x1:g} {y1:g} {x2:g} {y2:g} {x3:g} {y3:g}'
 
-    # 4. Red vs Blue midpoint. Basically the inverse of #2, pA.eterised by ex-Green split
+    # 4. Red vs Blue midpoint. Basically the inverse of #2, parameterised by ex-Green split
     # same as above except swap b and g and use GREEN_TO_*
     g = 0.5 / (2 - A.green_to_blue)
     b = 0.5 - (g * A.green_to_blue)
@@ -255,12 +266,10 @@ def draw_lines(A: argparse.Namespace) -> str:
     # Lines #3 - #6 - #7 represents the Blue/Green boundary
     blue_green = f'M {x3:g} {y3:g} {x6:g} {y6:g} {x7:g} {y7:g}' 
 
-    # Unconditionally we also have
-    # Top: Green max 45 at top (1 - A.stop, A.stop)
-    # Right: Blue max 45 at right (A.stop, 1 - A.stop)
+    # Unconditionally we also have a line down y = 1 - x
     # (this passes through the hapoint too, but no direction change)
-    (xtop, ytop) = p2c(1 - A.stop, A.stop, A)
-    (xright, yright) = p2c(A.stop, 1 - A.stop, A)
+    (xtop, ytop) = p2c(1.0 - A.stop, A.stop, A)
+    (xright, yright) = p2c(A.stop, 1.0 - A.stop, A)
     top_right = f'M {xtop:g} {ytop:g} {xright:g} {yright:g}'
 
     # OK, time to draw all the lines!
@@ -352,16 +361,16 @@ def construct_svg(A: argparse.Namespace) -> str:
     out += f'<text x="{A.width - A.scale*12:g}" y="{4*A.scale:g}" style="font-size:{A.scale:g}">{Party.GREEN.value[0]} to {Party.RED.value[0]}: {100.0*A.green_to_red:.1f}%</text>'
     out += f'<text x="{A.width - A.scale*12:g}" y="{6*A.scale:g}" style="font-size:{A.scale:g}">{Party.BLUE.value[0]} to {Party.RED.value[0]}: {100.0*A.blue_to_red:.1f}%</text>'
 
-    (x0, y0)   = p2c(A.start, A.stop, A)
-    (x0, y100) = p2c(A.start, A.stop, A)
-    (x100, y0) = p2c(A.stop, A.start, A)
+    (x0, y0)   = p2c(A.start, A.start,  A)
+    (x0, y100) = p2c(A.start, A.stop,   A)
+    (x100, y0) = p2c(A.stop,  A.start,  A)
 
     # Draw Y axis
-    out += f'<path d="M {x0:g} {A.width:g} V {A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
+    out += f'<path d="M {x0:g} {A.width:g} V {y100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
     out += f'<text transform="translate({(x0 - (A.offset - 1)*A.scale):g}, {A.width/2 :g}) rotate(270)" style="text-anchor:middle">{Party.GREEN.value[0]} 3CP</text>'
 
     for g in A.marks:
-        if g > A.start and g < A.stop:
+        if g > A.start and g <= (A.stop):
             (xpos, ypos) = p2c(A.start, g, A)
             out += f'<path d="M {xpos:g} {ypos:g} h {-A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
             out += f'<text y="{(ypos + A.scale/2):g}" x="{(xpos - 3*A.scale):g}" style="font-size:{A.scale:g}; text-anchor:right; text-align:middle">{g:.0%}</text>'
@@ -373,7 +382,7 @@ def construct_svg(A: argparse.Namespace) -> str:
 
 
     for b in A.marks:
-        if b > A.start and b < A.stop:
+        if b > A.start and b <= (A.stop):
             (xpos, ypos) = p2c(b, A.start, A)
             out += f'<path d="M {xpos:g} {ypos:g} v {A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
             out += f'<text x="{xpos:g}" y="{ypos + 2*A.scale:g}" style="font-size:{A.scale}; text-anchor:middle">{b:.0%}</text>'
@@ -410,33 +419,40 @@ def get_args(args=None) -> argparse.Namespace:
     parser.add_argument("--input", "-i", help="input CSV of points of interest (format: x, y, label) (pass - for standard input)")
     parser.add_argument("--output", "-o", type=argparse.FileType('w'), default=sys.stdout, help="output SVG (default: standard output)")
 
-    A = parser.parse_args(args)
+    return (parser.parse_args(args))
 
-    # Infer these...
+def validate_args(A: argparse.Namespace) -> argparse.Namespace:
+    # Clamp A.step to be in a reasonable range
+    A.step = max(min(abs(A.step), 0.05), 0.002)
+
+    # clamp A.start to be a usable range
+    A.start = max(min(abs(A.start), 0.5 - 10*A.step), 0.0)
+
+    # If (1 - A.stop) < A.start the graph gets wonky
+    A.stop = min(abs(A.stop), 1 - A.start)
+
+    # Calculate sizes...
+    A.inner_width = A.scale * 100.0 * (A.stop - A.start)
+    A.width = (A.offset + 1) * A.scale + A.inner_width # extra on right and top
+    A.radius =  50.0 * A.scale * A.step # A.scale is pixels per percent, A.step is percent per dot
+
+    # Clamp our preference flows...
+    A.green_to_red  = max(min(abs(A.green_to_red),  1.0), 0.0)
+    A.red_to_green  = max(min(abs(A.red_to_green),  1.0), 0.0)
+    A.blue_to_red   = max(min(abs(A.blue_to_red),   1.0), 0.0)
+
+    # Infer the inverse flows...
     A.green_to_blue  = 1.0 - A.green_to_red
     A.red_to_blue    = 1.0 - A.red_to_green
     A.blue_to_green  = 1.0 - A.blue_to_red
 
-    # and these...
-    A.inner_width = A.scale * 100.0 * (A.stop - A.start)
-    A.width = (A.offset + 1) * A.scale + A.inner_width # extra on right and top
-    A.radius = A.inner_width / (((A.stop - A.start) / A.step) * 2)
-
-    if A.red_to_green < 0.0 or A.red_to_green > 1.0:
-        print("ERROR: constant RED_TO_GREEN must be between 0.0 and 1.0", file=sys.stderr)
-        exit(1)
-    if A.green_to_red < 0.0 or A.green_to_red > 1.0:
-        print("ERROR: constant GREEN_TO_RED must be between 0.0 and 1.0", file=sys.stderr)
-        exit(1)
-    if A.blue_to_red < 0.0 or A.blue_to_red > 1.0:
-        print("ERROR: constant BLUE_TO_RED must be between 0.0 and 1.0", file=sys.stderr)
-        exit(1)
-
     return A
-
 
 # the main show!
 if __name__ == "__main__":
-    A = get_args()
-    print(construct_svg(A), file=A.output)
-
+    try:
+        A = validate_args(get_args())
+        print(A, file=sys.stderr)
+        print(construct_svg(A), file=A.output)
+    except ValueError as e:
+        print(e, file=sys.stderr)

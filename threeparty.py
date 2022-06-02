@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 import urllib.parse
 import os.path
 import re
@@ -16,19 +17,22 @@ def esc(str):
     )
 
 def make_args(query_dict):
-    """Update the argparse namespace from the query dict. """
+    """Update the argparse namespace from the query dict."""
+
     A = visualise.get_args("")
 
     for k in query_dict:
         if k in vars(A):
-            vars(A)[k] = query_dict[k]
+            vars(A)[k] = float(query_dict[k][0])
 
     # Not these though. #blocked
     A.css = None
     A.input = None
     A.output = None
+    A.marks = [i/10.0 for i in range(0, 10)]
 
-    return A
+    return visualise.validate_args(A)
+
 
 
 def application(env, start_response):
@@ -42,36 +46,34 @@ def application(env, start_response):
 
     # do intelligent things based on env['QUERY_STRING']
     query_dict = urllib.parse.parse_qs(env["QUERY_STRING"])
-    # print(query_dict)
 
-    # Now get the response out
-    body = (visualise.construct_svg(make_args(query_dict))).encode("utf8")
+    try:
+        # Now get the response out
+        A = make_args(query_dict)
+        body = visualise.construct_svg(A).encode("utf8")
 
-    # Name the file we return
-    head[1].append(
-        (
-            "Content-Disposition",
+        # Name the file we return
+        head[1].append(
             (
-                'inline; filename="'
-                + re.sub(
-                    "[^0-9a-zA-Z-_.]+",
-                    "-",
-                    "3pp_vis.svg", # TODO something to do with query_dict here
-                )
-                + '"'
-            ),
+                "Content-Disposition",
+                (
+                    'inline; filename="'
+                    + re.sub(
+                        "[^0-9a-zA-Z-_.]+",
+                        "-",
+                        "3pp_vis.svg", # TODO something to do with query_dict here
+                    )
+                    + '"'
+                ),
+            )
         )
-    )
-    # cache it for a day, but only in the browser
-    head[1].append(("Cache-Control", "private; max-age=86400"))
+        # cache it for a day, but only in the browser
+        head[1].append(("Cache-Control", "private; max-age=86400"))
 
-    # check head status again rather than an else, just in case something went wrong
-    if not head[0] == "200 OK":
-        body = (head[0] + " " + repr(query_dict)).encode("utf8")
-        head[1] = [
-            ("Content-Type", "text/html")
-        ]  # reverts whatever we did with Content-Disposition
+    except ValueError as e:
+        head = ["400 Bad Request", ("Content-Type", "text/html")]
+        body = ("\r\n".join(head[0], str(e) + repr(query_dict))).encode("utf8")
 
-    # print(repr(head))
+
     start_response(head[0], head[1])
     return [body]
