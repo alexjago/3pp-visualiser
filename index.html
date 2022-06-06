@@ -90,6 +90,7 @@
             let fd = new FormData(document.forms['dlForm'])
             let search = new URLSearchParams(fd);
             window.open("https://3pp.abjago.net/wsgi?" + search.toString())
+            document.getElementById("dlinput").setAttribute("value", "");
             return false;
         }
     </script>
