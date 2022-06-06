@@ -375,7 +375,7 @@ def draw_pois(A: argparse.Namespace) -> str:
             tooltip = f"{r2}\n{Party.GREEN.value[0]}: {r1:.1%}, {Party.RED.value[0]}: {(1 - (r1+r0)):.1%}, {Party.BLUE.value[0]}: {r0:.1%}."
 
             try:
-                (winner, margin) = calculate_winner(1 - (r0 + r1), r1, r0)
+                (winner, margin) = calculate_winner(1 - (r0 + r1), r1, r0, A)
                 tooltip += f"\nWinner: {winner.value[0]} {margin:.1%}"
             except TypeError: # ties A.n
                 tooltip += "\nWinner: TIE"                
