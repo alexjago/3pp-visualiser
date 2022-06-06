@@ -30,6 +30,8 @@ def make_args(query_dict):
     A.input = None
     A.output = None
     A.marks = [i/10.0 for i in range(0, 10)]
+    # and keep this reasonable too
+    A.step = max(0.005, A.step)
 
     return visualise.validate_args(A)
 
@@ -53,20 +55,19 @@ def application(env, start_response):
         body = visualise.construct_svg(A).encode("utf8")
 
         # Name the file we return
-        head[1].append(
-            (
-                "Content-Disposition",
+        if query_dict["dl"] == "true":
+            head[1].append(
                 (
-                    'inline; filename="'
-                    + re.sub(
-                        "[^0-9a-zA-Z-_.]+",
-                        "-",
-                        "3pp_vis.svg", # TODO something to do with query_dict here
-                    )
-                    + '"'
-                ),
+                    "Content-Disposition",
+                    (
+                        'download; filename="'
+                        + f"3pp_vis_g{A.green_to_red:g}_r{A.red_to_green:g}_b{A.blue_to_red:g}_f{A.start}_t{A.stop}_s{A.step}.svg"
+                    ),
+                )
             )
-        )
+        else:
+            head[1].append(("Content-Disposition", "inline"))
+        
         # cache it for a day, but only in the browser
         head[1].append(("Cache-Control", "private; max-age=86400"))
 

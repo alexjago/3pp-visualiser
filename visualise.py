@@ -20,7 +20,7 @@ text {font-family: sans-serif; font-size: 10px; fill: #222 }
 .t {fill: #888}
 /* point of interest */
 .poi {stroke:#000; fill-opacity:0.4; stroke-width: 0.2%}
-.line {stroke: #222; stroke-width: 0.5%; fill:none}
+.line {stroke: #222; stroke-width: 0.5%; fill:none; stroke-linecap:round;}
 #triangle {fill: #222}
 .bg {fill: #fff}
 """
