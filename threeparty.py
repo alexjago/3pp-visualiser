@@ -55,7 +55,7 @@ def application(env, start_response):
         body = visualise.construct_svg(A).encode("utf8")
 
         # Name the file we return
-        if query_dict["dl"]:
+        if query_dict.get("dl", False):
             head[1].append(
                 (
                     "Content-Disposition",
