@@ -27,6 +27,7 @@ text {font-family: sans-serif; font-size: 10px; fill: #222 }
 
 import argparse
 from enum import Enum
+import math
 import sys
 from typing import Tuple
 
@@ -41,67 +42,82 @@ class Party(Enum):
 
 def p2c(blue_pct: float, green_pct: float, A: argparse.Namespace) -> Tuple[float, float]:
     '''Percentages to Coordinates'''
+    # trying to account for being out-of-frame here was worse than not doing it
+    # additional context is needed and hence now line() exists
 
-    minX = A.offset * A.scale
-    maxX = A.width - A.scale
-
-    minY = A.width - minX
-    maxY = A.scale
-
-    x = ((blue_pct - A.start) / (A.stop - A.start)) * A.inner_width + minX
+    x = ((blue_pct - A.start) / (A.stop - A.start)) * A.inner_width + A.offset * A.scale
     y = A.inner_width * (1 - ((green_pct - A.start) / (A.stop - A.start))) + A.scale
 
-    x = max(min(x, maxX), minX)
-    y = min(max(y, maxY), minY)
-
-    return (x,   y)
+    return (x, y)
 
 
 def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argparse.Namespace) -> Tuple[Party, float]:
     '''Given 3PP percentages, calculate the winner and their 2CP result. 
         Ties for third are resolved where the winner is the same either way, 
         with the tighter 2CP result reported.'''
+
+    def eq(x, y):
+        """Equal, to a certain tolerance"""
+        # sufficiently close for our purposes
+        return math.isclose(x, y, abs_tol=A.step/10)
+
+    def lt(x, y):
+        """Strictly less than, beyond a certain tolerance"""
+        return (x < y) and not eq(x, y)
+
+    def gt(x, y):
+        """Strictly greater than, beyond a certain tolerance"""
+        return lt(y, x)
+
     # need to figure out who came third, then who won
-    if red_pct < green_pct and red_pct < blue_pct:
+    if lt(red_pct, green_pct) and lt(red_pct, blue_pct):
         # Red came third
         tcp = green_pct + (A.red_to_green * red_pct)
-        if tcp > 0.5:
+        if gt(tcp, 0.5):
             return (Party.GREEN, tcp)
-        else:
+        elif gt(1.0 - tcp, 0.5):
             return (Party.BLUE, 1.0 - tcp)
-    if green_pct < red_pct and green_pct < blue_pct:
+    if lt(green_pct, red_pct) and lt(green_pct, blue_pct):
         # Green came third
         tcp = red_pct + (A.green_to_red * green_pct)
-        if tcp > 0.5:
+        if gt(tcp, 0.5):
             return (Party.RED, tcp)
-        else:
+        elif gt(1.0 - tcp, 0.5):
             return (Party.BLUE, 1.0 - tcp)
-    if blue_pct < red_pct and blue_pct < green_pct:
+    if lt(blue_pct, green_pct) and lt(blue_pct, red_pct):
         # Blue came third
         tcp = red_pct + (A.blue_to_red * blue_pct)
-        if tcp > 0.5:
+        if gt(tcp, 0.5):
             return (Party.RED, tcp)
-        else:
+        elif gt(1.0 - tcp, 0.5):
             return (Party.GREEN, 1.0 - tcp)
+
+    # print("likely tie:", green_pct, red_pct, blue_pct, file=sys.stderr)
 
     # resolve some ties for third
     # if the leading party would win EITHER way, report their win and tightest margin
     # else, return nothing (interpreted as a tie)
-    if green_pct == blue_pct and green_pct < red_pct:
+    if eq(green_pct, blue_pct) and lt(green_pct, red_pct):
+        # Red leading
         gex = green_pct * A.green_to_red
         bex = blue_pct * A.blue_to_red
         if red_pct + gex > 0.5 and red_pct + bex > 0.5:
             return (Party.RED, red_pct + min(gex, bex))
-    if red_pct == blue_pct and red_pct < green_pct:
+    if eq(red_pct, blue_pct) and lt(red_pct, green_pct):
+        # Green leading
         rex = red_pct * A.red_to_green
         bex = blue_pct * A.blue_to_green
         if green_pct + rex > 0.5 and green_pct + bex > 0.5:
             return (Party.GREEN, green_pct + min(rex, bex))
-    if green_pct == red_pct and green_pct < blue_pct:
+    if eq(green_pct, red_pct) and lt(green_pct, blue_pct):
+        # Blue leading
         gex = green_pct * A.green_to_blue
         rex = red_pct * A.red_to_blue
         if blue_pct + gex > 0.5 and blue_pct + rex > 0.5:
             return (Party.BLUE, blue_pct + min(gex, rex))
+
+    # print("actual tie:", green_pct, red_pct, blue_pct, file=sys.stderr)
+
 
 
 def construct_dot(blue_pct: float, green_pct: float, A: argparse.Namespace) -> str:
@@ -142,6 +158,69 @@ def frange(start, stop=None, step=None) -> float:
         count += 1.0
 
 
+def clamp_val(val: float, lo: float, hi: float) -> float:
+    """Constrain val to be between hi and lo"""
+    return max(min(val, hi), lo)
+
+def clamp(val: float, A: argparse.Namespace) -> float:
+    """Constrain val to be within A.start and A.stop"""
+    return clamp_val(val, A.start, A.stop)
+
+def line(x0: float, y0: float, x1: float, y1: float, A: argparse.Namespace) -> str:
+    """Takes two points (percentage-space) and returns the appropriate path fragment, ensuring that they're all in-bounds."""
+
+    # we COULD have just used <clipPath> but this is even cleaner in the SVG
+
+    # general principle: there'll be a gradient.
+    # if anything is off the edge, we can replace with appropriate point on the edge
+
+    xa = clamp(x0, A)
+    ya = clamp(y0, A)
+    xb = clamp(x1, A)
+    yb = clamp(y1, A)
+
+    if math.isclose(x0, x1):
+        # special case: vertical line
+        # we can clamp without fear
+        pass
+    elif math.isclose(y0, y1):
+        # horizontal line
+        pass
+    elif (x0 <= A.start and x1 <= A.start) or (y0 <= A.start and y1 <= A.start) or \
+            (x0 >= A.stop and x1 >= A.stop) or (y0 >= A.stop and y1 >= A.stop):
+        # whole of line would be off-viewport
+        return ""
+    else:
+        # get the line equation... 
+        m = (y1 - y0)/(x1 - x0) # gradient
+        c = y0 - m * x0         # y-offset
+        
+        if x0 < A.start:
+            ya = m * A.start + c
+        elif x0 > A.stop:
+            ya = m * A.stop + c
+
+        if x1 < A.start:
+            yb = m * A.start + c
+        elif x0 > A.stop:
+            yb = m * A.stop + c
+
+        if y0 < A.start:
+            xa = (A.start - c) / m
+        elif y0 > A.stop:
+            xa = (A.stop - c) / m
+
+        if y1 < A.start:
+            xb = (A.start - c) / m
+        elif y1 > A.stop:
+            xb = (A.stop - c) / m
+
+    # Finally, convert to coordinates and return
+    (xp, yp) = p2c(xa, ya, A)
+    (xq, yq) = p2c(xb, yb, A)
+
+    return f"M {xp:g} {yp:g} {xq:g} {yq:g}"
+        
 def draw_lines(A: argparse.Namespace) -> str:
     """Draw change-of-winner lines."""
 
@@ -149,7 +228,7 @@ def draw_lines(A: argparse.Namespace) -> str:
 
     # Firstly, a line #1-#2-#3
     # 1. Green vs Red on Y axis
-    (x1, y1) = p2c(A.start, (0.5 - (A.start * A.blue_to_green)), A)
+    (x1, y1) = (A.start, (0.5 - (A.start * A.blue_to_green)))
 
     # 2. Green vs Rd midpoint. Controlled by ex-Blue split
     # At max Greens-Red preferencing, it varies from 
@@ -184,15 +263,15 @@ def draw_lines(A: argparse.Namespace) -> str:
         g = 0.5 / (1 + A.blue_to_green)
         b = g
 
-    (x2, y2) = p2c(b, g, A)
+    (x2, y2) = (b, g)
 
 
     # 3. the (1/3, 1/3) point ("terpoint")
     # Always some sort of boundary
-    (x3, y3) = p2c(1.0/3.0, 1.0/3.0, A)
+    (x3, y3) = (1.0/3.0, 1.0/3.0)
 
     # Line #1-#2-#3 represents the Red/Green boundary
-    red_green = f'M {x1:g} {y1:g} {x2:g} {y2:g} {x3:g} {y3:g}'
+    red_green = f'{line(x1, y1, x2, y2, A)} {line(x2, y2, x3, y3, A)}'
 
     # 4. Red vs Blue midpoint. Basically the inverse of #2, parameterised by ex-Green split
     # same as above except swap b and g and use GREEN_TO_*
@@ -201,13 +280,13 @@ def draw_lines(A: argparse.Namespace) -> str:
     if A.green_to_red <= 0.5:
         b = 0.5 / (1 + A.green_to_blue)
         g = b
-    (x4, y4) = p2c(b, g, A)
+    (x4, y4) = (b, g)
 
     # 5. Red vs Blue on X axis 
-    (x5, y5) = p2c(0.5 - A.start * A.green_to_blue, A.start, A)
+    (x5, y5) = (0.5 - A.start * A.green_to_blue, A.start)
 
     # Lines #3 - #4 - #5 represents the Red/Blue boundary
-    red_blue = f'M {x3:g} {y3:g} {x4:g} {y4:g} {x5:g} {y5:g}'
+    red_blue = f'{line(x3, y3, x4, y4, A)} {line(x4, y4, x5, y5, A)}'
 
     # 6. Blue vs Green point. This is controlled by Red's Blue/Green split
     # there's one line coming "out" of the terpoint #3
@@ -257,14 +336,14 @@ def draw_lines(A: argparse.Namespace) -> str:
         g = A.red_to_blue / (2 - A.red_to_green)
         b = (1 - g)/2
 
-    (x6, y6) = p2c(b, g, A)
+    (x6, y6) = (b, g)
 
     # 7. Green vs Blue on 45 (hapoint)
     # Also always some sort of boundary
-    (x7, y7) = p2c(0.5, 0.5, A)
+    (x7, y7) = (0.5, 0.5)
 
     # Lines #3 - #6 - #7 represents the Blue/Green boundary
-    blue_green = f'M {x3:g} {y3:g} {x6:g} {y6:g} {x7:g} {y7:g}' 
+    blue_green = f'{line(x3, y3, x6, y6, A)} {line(x6, y6, x7, y7, A)}' 
 
     # Unconditionally we also have a line down y = 1 - x
     # (this passes through the hapoint too, but no direction change)
@@ -274,7 +353,7 @@ def draw_lines(A: argparse.Namespace) -> str:
 
     # OK, time to draw all the lines!
 
-    return f'<path d="{red_green} {red_blue} {blue_green} {top_right}" class="line" />'
+    return f'\r\n<path d="{red_green} {red_blue} {blue_green} {top_right}" class="line" />\r\n'
 
 def draw_pois(A: argparse.Namespace) -> str:
     """Draw points of interest, as appearing in the specified CSV file"""
@@ -300,7 +379,7 @@ def draw_pois(A: argparse.Namespace) -> str:
                 tooltip += f"\nWinner: {winner.value[0]} {margin:.1%}"
             except TypeError: # ties A.n
                 tooltip += "\nWinner: TIE"                
-            out += f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="d poi"><title>{tooltip}</title></circle>'
+            out += f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="d poi"><title>{tooltip}</title></circle>\r\n'
 
         except (TypeError, IndexError, ValueError) as e:
             print("Error while parsing input row:", e, file=sys.stderr)
@@ -452,7 +531,7 @@ def validate_args(A: argparse.Namespace) -> argparse.Namespace:
 if __name__ == "__main__":
     try:
         A = validate_args(get_args())
-        print(A, file=sys.stderr)
+        # print(A, file=sys.stderr)
         print(construct_svg(A), file=A.output)
     except ValueError as e:
         print(e, file=sys.stderr)

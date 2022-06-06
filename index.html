@@ -13,7 +13,8 @@
         #buttons {
             right: 6px;
             bottom: 6px;
-            justify-content: right;
+            display: flex;
+
         }
 
         .btn {
@@ -65,7 +66,10 @@
                 <input type="number" min="0" max="0.1" step="0.002" placeholder="0.01" name="step" optional="">
                 <br /><br />
                 <div id="buttons" width="100%;">
-                    <button type="submit" class="btn btn-primary">Reload Graph</button>
+                    <button type="submit" class="btn btn-primary" style="justify-self: flex-start;">Reload
+                        Graph</button>
+                    <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
+                        Graph</button>
                 </div>
             </form>
             <hr />
@@ -77,9 +81,15 @@
             event.preventDefault();
             let fd = new FormData(document.forms['dlForm'])
             let search = new URLSearchParams(fd);
-            console.log(search.toString())
             document.getElementById("fillMe").setAttribute("src", "https://3pp.abjago.net/wsgi?" + search.toString())
         });
+
+        function downloadGraph() {
+            let fd = new FormData(document.forms['dlForm'])
+            let search = new URLSearchParams(fd);
+            window.open("https://3pp.abjago.net/wsgi?" + search.toString())
+            return false;
+        }
     </script>
 </body>
 
