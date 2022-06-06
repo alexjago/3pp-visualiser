@@ -131,11 +131,11 @@ def construct_dot(blue_pct: float, green_pct: float, A: argparse.Namespace) -> s
     try:
         (winner, margin) = calculate_winner(red_pct, green_pct, blue_pct, A)
         tooltip = f"{tooltip_3cp} Winner: {(winner.value)[0]} {margin:.1%}"
-        return f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="{(winner.value)[1]} d"><title>{tooltip}</title></circle>'
+        return f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="{(winner.value)[1]} d"><title>{tooltip}</title></circle>'.replace(".0%", "%")
 
     except TypeError: # raised on a tie
         tooltip = f"{tooltip_3cp} Winner: TIE"
-        return f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="t d"><title>{tooltip}</title></circle>'
+        return f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="t d"><title>{tooltip}</title></circle>'.replace(".0%", "%")
 
 
 def frange(start, stop=None, step=None) -> float:
@@ -372,11 +372,11 @@ def draw_pois(A: argparse.Namespace) -> str:
 
             r2 = row[2] if len(row) > 2 else ""
             (x, y) = p2c(r0, r1, A)
-            tooltip = f"{r2}\n{Party.GREEN.value[0]}: {r1:.1%}, {Party.RED.value[0]}: {(1 - (r1+r0)):.1%}, {Party.BLUE.value[0]}: {r0:.1%}."
+            tooltip = f"{r2}\n{Party.GREEN.value[0]}: {r1:.1%}, {Party.RED.value[0]}: {(1 - (r1+r0)):.1%}, {Party.BLUE.value[0]}: {r0:.1%}.".replace(".0%", "%")
 
             try:
                 (winner, margin) = calculate_winner(1 - (r0 + r1), r1, r0, A)
-                tooltip += f"\nWinner: {winner.value[0]} {margin:.1%}"
+                tooltip += f"\nWinner: {winner.value[0]} {margin:.1%}".replace(".0%", "%")
             except TypeError: # ties A.n
                 tooltip += "\nWinner: TIE"                
             out += f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="d poi"><title>{tooltip}</title></circle>\r\n'
