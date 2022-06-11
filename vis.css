@@ -4,6 +4,11 @@ text {
     fill: #222
 }
 
+text.label {
+    filter: url(#keylineEffect);
+    font-weight: bold
+}
+
 /* dot, red, green, blue, tie*/
 .d {
     opacity: 60%;
@@ -31,9 +36,7 @@ text {
 
 /* point of interest */
 .poi {
-    stroke: #000;
-    fill-opacity: 40%;
-    stroke-width: 0.2%
+    fill: #222;
 }
 
 .line {
@@ -50,4 +53,12 @@ text {
 
 .bg {
     fill: #fff
+}
+
+.arrow {
+    fill: none;
+    stroke: #222;
+    stroke-width: 2;
+    stroke-dasharray: 4 2;
+    stroke-dashoffset: 0;
 }

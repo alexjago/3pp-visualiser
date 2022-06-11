@@ -10,7 +10,8 @@ The primary methods that you'll want to call are `get_args` and `construct_svg`.
 
 
 DEFAULT_CSS = """
-text {font-family: sans-serif; font-size: 10px; fill: #222 }
+text {font-family: sans-serif; font-size: 10px; fill: #222;}
+text.label {filter: url(#keylineEffect); font-weight: bold}
 /* dot, red, green, blue, tie*/
 .d {opacity:0.6;}
 .d:hover {opacity:1;}
@@ -19,9 +20,10 @@ text {font-family: sans-serif; font-size: 10px; fill: #222 }
 .b {fill: #08e}
 .t {fill: #888}
 /* point of interest */
-.poi {stroke:#000; fill-opacity:0.4; stroke-width: 0.2%}
+.poi {stroke:#000; fill-opacity:0.4; stroke-width: 0.3%}
 .line {stroke: #222; stroke-width: 0.5%; fill:none; stroke-linecap:round;}
 #triangle {fill: #222}
+.arrow {fill:none; stroke:#111; stroke-width:0.5%; stroke-dasharray:4 2; stroke-dashoffset:0;}
 .bg {fill: #fff}
 """
 
@@ -382,7 +384,7 @@ def draw_pois(A: argparse.Namespace) -> str:
             out += f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="d poi"><title>{tooltip}</title></circle>\r\n'
 
         except (TypeError, IndexError, ValueError) as e:
-            print("Error while parsing input row:", e, file=sys.stderr)
+            print("Could not parse input row:", e, file=sys.stderr)
             print(row, file=sys.stderr)
 
     return out
@@ -395,25 +397,38 @@ def construct_svg(A: argparse.Namespace) -> str:
 
     out += f'<svg viewBox="0 0 {A.width:.0f} {A.width:.0f}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
 
-    # Set up <defs> section, including our triangle marker and our CSS
+    # Set up <defs> section, including our triangle marker, the keyline effect and our CSS
 
     css = DEFAULT_CSS
     if A.css:
         css = (A.css).read()
 
-    out += f'<defs> \
-        <marker id="triangle" viewBox="0 0 10 10" \
+    out += '<defs>' + \
+        f'<marker id="triangle" viewBox="0 0 10 10" \
             refX="1" refY="5" \
             markerUnits="strokeWidth" \
             markerWidth="{A.scale * 0.5}" markerHeight="{A.scale * 0.5}" \
             orient="auto"> \
         <path d="M 0 0 L 10 5 L 0 10 z"/> \
-        </marker> \
-        <style type="text/css"><![CDATA[ \
+        </marker>' + \
+        """<filter id="keylineEffect" color-interpolation-filters="sRGB">
+            <feMorphology in="SourceGraphic" result="MORPH" operator="dilate" radius="1.5"/>
+            <feComponentTransfer result="KEYLINE">
+                <!-- invert colors -->
+                <feFuncR type="linear" slope="-1" intercept="1" />
+                <feFuncG type="linear" slope="-1" intercept="1" />
+                <feFuncB type="linear" slope="-1" intercept="1" />
+            </feComponentTransfer>
+            <feMerge>
+                <feMergeNode in="KEYLINE"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>""" + \
+        f'<style type="text/css"><![CDATA[ \
             {css} \
         ]]> \
-        </style> \
-    </defs>'
+        </style>' + \
+    '</defs>'
 
     # place a bg rect
 
