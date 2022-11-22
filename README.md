@@ -4,7 +4,7 @@ As 3PP contests become more relevant, a need arises for analysis tools.
 
 This repo contains a Python script to generate SVG graphs of 3PP contests, plus tooling to put it online.
 
-## Using the script
+## Using the script locally
 
 Download and run `visualise.py`. There are no dependencies other than modern Python 3. 
 
@@ -18,23 +18,29 @@ The script assumes the presence of a copy of this repository in the static websi
 
 ## Setup (for recent Debian/Ubuntu)
 
-Install the server-specific packages (or perhaps ensure they're installed):
+An NGINX sample server config is provided (further details of NGINX setup are beyond the scope of this project):
 
-    sudo apt-get install nginx uwsgi
+    sudo apt-get install nginx 
 
-(N.B.: I tried using a `virtualenv` and it was a bit of a mess, so everything is system-installed.)
+On Ubuntu 22.04 as of November 2022, the "system" version of uWSGI needs Python 3.8 but the OS ships with 3.10. 
+Thus a virtualenv is needed.
 
-Create a service directory:
+Create a service directory, initialise a virtualenv, activate it and then install latest uWSGI:
 
-    sudo mkdir /etc/threeparty
+    sudo mkdir /opt/threeparty && cd /opt/threeparty
+    sudo python3 -m venv ./env
+    source ./env/bin/activate
+    sudo ./env/bin/pip install uwsgi
+
+Note: it's critical that you use `./env/bin/pip` for the final step, not just `pip`; otherwise the package will be system-installed.
 
 Copy the WSGI-related files from this subdirectory of the repository to the service directory:
 
-    sudo cp -r /PATH/TO/threeparty/ /etc/threeparty
+    sudo cp -r /PATH/TO/COPY/OF/threeparty/ /opt/threeparty
 
 Copy the `threeparty.service.conf` where it needs to be, then edit if required:
 
-    sudo cp /etc/threeparty/threeparty.service.conf /etc/systemd/system/threeparty.service
+    sudo cp /opt/threeparty/threeparty.service.conf /etc/systemd/system/threeparty.service
     sudo nano /etc/systemd/system/threeparty.service
 
 Enable and activate:
