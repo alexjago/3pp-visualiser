@@ -79,26 +79,29 @@ def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argpa
         # Red came third
         green_2cp = green_pct + (A.red_to_green * red_pct)
         blue_2cp = blue_pct + (A.red_to_blue * red_pct)
+        margin = green_2cp / (green_2cp + blue_2cp) - 0.5
         if gt(green_2cp, blue_2cp):
-            return (Party.GREEN, green_2cp)
+            return (Party.GREEN, margin)
         elif gt(blue_2cp, green_2cp):
-            return (Party.BLUE, blue_2cp)
+            return (Party.BLUE, -margin)
     if lt(green_pct, red_pct) and lt(green_pct, blue_pct):
         # Green came third
         red_2cp = red_pct + (A.green_to_red * green_pct)
         blue_2cp = blue_pct + (A.green_to_blue * green_pct)
+        margin = red_2cp / (red_2cp + blue_2cp) - 0.5
         if gt(red_2cp, blue_2cp):
-            return (Party.RED, red_2cp)
-        elif gt(blue_2cp, red_2cp):
-            return (Party.BLUE, blue_2cp)
+            return (Party.RED, margin)
+        elif gt(blue_2cp, margin):
+            return (Party.BLUE, -margin)
     if lt(blue_pct, green_pct) and lt(blue_pct, red_pct):
         # Blue came third
         red_2cp = red_pct + (A.blue_to_red * blue_pct)
         green_2cp = green_pct + (A.blue_to_green * blue_pct)
+        margin = red_2cp / (green_2cp + red_2cp) - 0.5
         if gt(red_2cp, green_2cp):
-            return (Party.RED, red_2cp)
+            return (Party.RED, margin)
         elif gt(green_2cp, red_2cp):
-            return (Party.GREEN, green_2cp)
+            return (Party.GREEN, -margin)
 
     # print("likely tie:", green_pct, red_pct, blue_pct, file=sys.stderr)
 
