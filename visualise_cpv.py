@@ -8,6 +8,7 @@ We'll call the three parties "blue" (x-axis), "green" (y-axis) and "red" (with R
 The primary methods that you'll want to call are `get_args` and `construct_svg`.
 """
 
+
 from typing import Tuple
 import sys
 import math
@@ -29,7 +30,6 @@ text.label {filter: url(#keylineEffect); font-weight: bold}
 #triangle {fill: #222}
 .arrow {fill:none; stroke:#111; stroke-width:0.5%; stroke-dasharray:4 2; stroke-dashoffset:0;}
 .bg {fill: #fff}
-#preflabel {opacity: 0.9}
 """
 
 
@@ -64,7 +64,7 @@ def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argpa
     def eq(x, y):
         """Equal, to a certain tolerance"""
         # sufficiently close for our purposes
-        return math.isclose(x, y, abs_tol=A.step/10.0)
+        return math.isclose(x, y, abs_tol=A.step/10)
 
     def lt(x, y):
         """Strictly less than, beyond a certain tolerance"""
@@ -77,72 +77,49 @@ def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argpa
     # need to figure out who came third, then who won
     if lt(red_pct, green_pct) and lt(red_pct, blue_pct):
         # Red came third
-        green_2cp = green_pct + (A.red_to_green * red_pct)
-        blue_2cp = blue_pct + (A.red_to_blue * red_pct)
-        if gt(green_2cp, blue_2cp):
-            return (Party.GREEN, green_2cp)
-        elif gt(blue_2cp, green_2cp):
-            return (Party.BLUE, blue_2cp)
+        tcp = green_pct + (A.red_to_green * red_pct)
+        if gt(tcp, 0.5):
+            return (Party.GREEN, tcp)
+        elif gt(1.0 - tcp, 0.5):
+            return (Party.BLUE, 1.0 - tcp)
     if lt(green_pct, red_pct) and lt(green_pct, blue_pct):
         # Green came third
-        red_2cp = red_pct + (A.green_to_red * green_pct)
-        blue_2cp = blue_pct + (A.green_to_blue * green_pct)
-        if gt(red_2cp, blue_2cp):
-            return (Party.RED, red_2cp)
-        elif gt(blue_2cp, red_2cp):
-            return (Party.BLUE, blue_2cp)
+        tcp = red_pct + (A.green_to_red * green_pct)
+        if gt(tcp, 0.5):
+            return (Party.RED, tcp)
+        elif gt(1.0 - tcp, 0.5):
+            return (Party.BLUE, 1.0 - tcp)
     if lt(blue_pct, green_pct) and lt(blue_pct, red_pct):
         # Blue came third
-        red_2cp = red_pct + (A.blue_to_red * blue_pct)
-        green_2cp = green_pct + (A.blue_to_green * blue_pct)
-        if gt(red_2cp, green_2cp):
-            return (Party.RED, red_2cp)
-        elif gt(green_2cp, red_2cp):
-            return (Party.GREEN, green_2cp)
+        tcp = red_pct + (A.blue_to_red * blue_pct)
+        if gt(tcp, 0.5):
+            return (Party.RED, tcp)
+        elif gt(1.0 - tcp, 0.5):
+            return (Party.GREEN, 1.0 - tcp)
 
     # print("likely tie:", green_pct, red_pct, blue_pct, file=sys.stderr)
 
-    # resolve ties for third with casting vote of A.step/10
+    # resolve some ties for third
     # if the leading party would win EITHER way, report their win and tightest margin
     # else, return nothing (interpreted as a tie)
     if eq(green_pct, blue_pct) and lt(green_pct, red_pct):
         # Red leading
-
-        # casting vote to exclude Green
-        gex = calculate_winner(red_pct, green_pct -
-                               A.step/10.0, blue_pct + A.step/10.0, A)
-        # casting vote to exclude Blue
-        bex = calculate_winner(red_pct, green_pct +
-                               A.step/10.0, blue_pct - A.step/10.0, A)
-
-        if gex[0] == Party.RED and bex[0] == Party.RED:
-            return (Party.RED, min(gex[1], bex[1]))
-
+        gex = green_pct * A.green_to_red
+        bex = blue_pct * A.blue_to_red
+        if red_pct + gex > 0.5 and red_pct + bex > 0.5:
+            return (Party.RED, red_pct + min(gex, bex))
     if eq(red_pct, blue_pct) and lt(red_pct, green_pct):
         # Green leading
-
-        # casting vote to exclude Red
-        rex = calculate_winner(red_pct - A.step/10,
-                               green_pct, blue_pct + A.step/10, A)
-        # casting vote to exclude Blue
-        bex = calculate_winner(red_pct + A.step/10,
-                               green_pct, blue_pct - A.step/10, A)
-
-        if rex[0] == Party.GREEN and bex[0] == Party.GREEN:
-            return (Party.GREEN, min(rex[1], bex[1]))
-
+        rex = red_pct * A.red_to_green
+        bex = blue_pct * A.blue_to_green
+        if green_pct + rex > 0.5 and green_pct + bex > 0.5:
+            return (Party.GREEN, green_pct + min(rex, bex))
     if eq(green_pct, red_pct) and lt(green_pct, blue_pct):
         # Blue leading
-
-        # casting vote to exclude Green
-        gex = calculate_winner(red_pct + A.step/10, green_pct -
-                               A.step/10, blue_pct, A)
-        # casting vote to exclude Red
-        rex = calculate_winner(red_pct - A.step/10, green_pct +
-                               A.step/10, blue_pct, A)
-
-        if gex[0] == Party.BLUE and rex[0] == Party.BLUE:
-            return (Party.BLUE, min(gex[1], rex[1]))
+        gex = green_pct * A.green_to_blue
+        rex = red_pct * A.red_to_blue
+        if blue_pct + gex > 0.5 and blue_pct + rex > 0.5:
+            return (Party.BLUE, blue_pct + min(gex, rex))
 
     # print("actual tie:", green_pct, red_pct, blue_pct, file=sys.stderr)
 
@@ -254,43 +231,65 @@ def line(x0: float, y0: float, x1: float, y1: float, A: argparse.Namespace) -> s
 def draw_lines(A: argparse.Namespace) -> str:
     """Draw change-of-winner lines."""
 
-    # Point #1, the Green vs Red point on the Y axis, is at
-    # g + A.blue_to_green * b == r + A.blue_to_red * b
-    # g = r + (A.blue_to_red * b) - (A.blue_to_green * b)
-    # g = (1 - (b + g)) + (A.blue_to_red - A.blue_to_green) * b
-    # 2g = (1 - b) + (A.blue_to_red - A.blue_to_green) * b
-    x1 = A.start
-    y1 = ((1 - x1) + (A.blue_to_red - A.blue_to_green) * x1)/2.0
+    # There are at least 8 points to draw lines between.
 
-    # Point #2 is the Green vs Red midpoint
-    # It is paramaterised by the ex-Blue split
-    # The line between here and the terpoint marks G > R = B
-    # r = b = (1 - g)/2
-    # or alternatively the `y = 1 - 2x` line
-    # While the line between here and point #1 marks the G vs R 2CP
-    # y = ((1 - x) + (A.blue_to_red - A.blue_to_green)*x)/2
-    # Point #2 is at the intersection of these lines
-    a2 = A.blue_to_red - A.blue_to_green
-    x2 = 1/(a2 + 3)
-    y2 = (a2+1)/(a2+3)
+    # Firstly, a line #1-#2-#3
+    # 1. Green vs Red on Y axis
+    (x1, y1) = (A.start, (0.5 - (A.start * A.blue_to_green)))
 
-    # Point #3 is the (1/3, 1/3) point ("terpoint")
+    # 2. Green vs Rd midpoint. Controlled by ex-Blue split
+    # At max Greens-Red preferencing, it varies from
+    # (0.25, 0.5) at full Blue-to-Red
+    # degenerates at equal split (to terpoint)
+    # (0.25, 0.25) at full Blue-to-Green
+
+    # there's a line coming out of the terpoint that (at least for normal values)
+    # marks out the "Greens 3CP >= Labor 3CP == Liberal 3CP"
+    #   1 - (g+b) = b
+
+    # and another coming in from #1 that A.marks the Labor-Greens 2CP boundary
+    #   g + (b * A.blue_to_green) = 0.5
+
+    # This point is where those lines cross: we have Greens 3CP >= Labor 3CP == Liberal 3CP
+    #   g = 0.5 - (b * A.blue_to_green)
+    #   b = 1 - ((0.5 - (b * A.blue_to_green)) + b)
+    #   b = 0.5 + (b * A.blue_to_green) - b
+    #   2b = 0.5 + (b * A.blue_to_green)
+    #   b (2 - A.blue_to_green) = 0.5
+    #   b = 0.5 / (2 - A.blue_to_green)
+
+    b = 0.5 / (2 - A.blue_to_green)
+    g = 0.5 - (b * A.blue_to_green)
+
+    # if A.blue_to_red is less than half, then #2 sits on the b = g line instead
+    # (the gradient of the #1-#2 line is still correct)
+    if A.blue_to_red <= 0.5:
+        # g = 0.5 - (b * A.blue_to_green)
+        # g = 0.5 - (g * A.blue_to_green)
+        # g (1 + A.blue_to_green) = 0.5
+        g = 0.5 / (1 + A.blue_to_green)
+        b = g
+
+    (x2, y2) = (b, g)
+
+    # 3. the (1/3, 1/3) point ("terpoint")
     # Always some sort of boundary
     (x3, y3) = (1.0/3.0, 1.0/3.0)
 
     # Line #1-#2-#3 represents the Red/Green boundary
     red_green = f'{line(x1, y1, x2, y2, A)} {line(x2, y2, x3, y3, A)}'
 
-    # Point #4 is the Red vs Blue midpoint.
-    # Basically the inverse of #2, parameterised by ex-Green split
-    a4 = A.green_to_red - A.green_to_blue
-    x4 = (a4 + 1)/(a4 + 3)
-    y4 = 1/(a4 + 3)
+    # 4. Red vs Blue midpoint. Basically the inverse of #2, parameterised by ex-Green split
+    # same as above except swap b and g and use GREEN_TO_*
+    g = 0.5 / (2 - A.green_to_blue)
+    b = 0.5 - (g * A.green_to_blue)
+    if A.green_to_red <= 0.5:
+        b = 0.5 / (1 + A.green_to_blue)
+        g = b
+    (x4, y4) = (b, g)
 
-    # Point #5 is Red vs Blue on the X axis
-    # The inverse of #1
-    y5 = A.start
-    x5 = ((1 - y5) + a4 * y5)/2.0
+    # 5. Red vs Blue on X axis
+    (x5, y5) = (0.5 - A.start * A.green_to_blue, A.start)
 
     # Lines #3 - #4 - #5 represents the Red/Blue boundary
     red_blue = f'{line(x3, y3, x4, y4, A)} {line(x4, y4, x5, y5, A)}'
@@ -298,7 +297,6 @@ def draw_lines(A: argparse.Namespace) -> str:
     # 6. Blue vs Green point. This is controlled by Red's Blue/Green split
     # there's one line coming "out" of the terpoint #3
     # (it's NW if red favours blue, SE if red favours green)
-    # (i.e. it's either the #2-#3 gradient or the #3-#4 gradient)
     # and one out of the hapoint #7 (the Red-comes-third line)
     # (mostly W if red favours blue, mostly S if red favours green)
     # This point occurs where these two lines cross
@@ -306,33 +304,45 @@ def draw_lines(A: argparse.Namespace) -> str:
     # (if red favours green, then red and green will be equal here)
     # degenerates to terpoint if equal ex-Red split
 
-    # Set the following for convenience
-    a6 = A.red_to_blue - A.red_to_green
+    # terpoint degeneration (A.red_to_blue == 0.5)
+    b = 1.0/3.0
+    g = 1.0/3.0
 
-    # green-blue line at
-    # green + A.red_to_green * red == blue + A.red_to_blue * red
-    # green = blue + A.red_to_blue * red - A.red_to_green * red
-    # green = blue + red * (A.red_to_blue - A.red_to_green)
-    # green = blue + (1 - (green + blue)) * (A.red_to_blue - A.red_to_green)
-    # green = blue + 1*a - green*a - blue*a
-    # green (1 + a) = blue + (1 - blue) * a
-    # green = (blue + (1 - blue) * a) / (1 + a)
-    # (where a in range [-1, 1])
+    if A.red_to_green == 0.0:
+        b = 0.25
+        g = 0.5
+    elif A.red_to_blue == 0.0:
+        b = 0.5
+        g = 0.25
+    elif A.red_to_blue < 0.5:
+        # red's coming third and favouring green
+        # we follow the b >= (r == g) line out of the terpoint
+        # (1 - (b+g)) == g
+        # 1 - b = 2g
+        # g = (1 - b)/2
 
-    if a6 == 0:
-        (x6, y6) = (1.0/3.0, 1.0/3.0)
-    elif a6 > 0:
-        # Red favours Blue
-        # Intersection on the #2-#3 gradient
-        # The solution appears to be
-        x6 = 1 / (a6 + 3)
-        y6 = (a6 + 1) / (a6 + 3)
-    else:
-        # Red favours Green
-        # Intersection on the #3-#4 gradient
-        # Solution appears to be
-        x6 = (a6 - 1)/(a6 - 3)
-        y6 = 1/(3 - a6)
+        # we also follow the green == blue 2CP from the hapoint
+        # b + r * A.red_to_blue == g + r - r * A.red_to_blue == 0.5
+
+        # b + r * A.red_to_blue = 0.5
+        # b + (1 - (b+g))*A.red_to_blue = 0.5
+        # b + (1 - (b + ((1-b)/2))) * A.red_to_blue = 0.5
+        # b + (1 - (b + 0.5 - 0.5b)) * A.red_to_blue = 0.5
+        # b + (1 - (b + 1)/2) * A.red_to_blue = 0.5
+        # b + ((1 - b) * A.red_to_blue / 2) = 0.5
+        # b - b*A.red_to_blue/2 + A.red_to_blue/2 = 0.5
+        # 2b - b*A.red_to_blue + A.red_to_blue = 1
+        # b * (2 - A.red_to_blue) + A.red_to_blue = 1
+        # b = A.red_to_green / (2 - A.red_to_blue)
+        b = A.red_to_green / (2 - A.red_to_blue)
+        g = (1 - b)/2
+
+    elif A.red_to_blue > 0.5:
+        # transpose of the < 0.5 case...
+        g = A.red_to_blue / (2 - A.red_to_green)
+        b = (1 - g)/2
+
+    (x6, y6) = (b, g)
 
     # 7. Green vs Blue on 45 (hapoint)
     # Also always some sort of boundary
@@ -447,17 +457,11 @@ def construct_svg(A: argparse.Namespace) -> str:
     if A.input:
         out += draw_pois(A)
 
-    # Draw labels stating preference assumptions
-    out += '<g id="preflabel">'
-    # place a rect
-    out += f'<rect width="{A.scale*13:g}" height="{6.5*A.scale:g}" x="{A.width - A.scale*12.5:g}" y="{A.scale:g}" class="bg"/>'
+    # draw labels saying assumptions?
+
     out += f'<text x="{A.width - A.scale*12:g}" y="{2*A.scale:g}" style="font-size:{A.scale:g}">{Party.RED.value[0]} to {Party.GREEN.value[0]}: {100.0*A.red_to_green:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{3*A.scale:g}" style="font-size:{A.scale:g}">{Party.RED.value[0]} to {Party.BLUE.value[0]}: {100.0*A.red_to_blue:.1f}%</text>'
     out += f'<text x="{A.width - A.scale*12:g}" y="{4*A.scale:g}" style="font-size:{A.scale:g}">{Party.GREEN.value[0]} to {Party.RED.value[0]}: {100.0*A.green_to_red:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{5*A.scale:g}" style="font-size:{A.scale:g}">{Party.GREEN.value[0]} to {Party.BLUE.value[0]}: {100.0*A.green_to_blue:.1f}%</text>'
     out += f'<text x="{A.width - A.scale*12:g}" y="{6*A.scale:g}" style="font-size:{A.scale:g}">{Party.BLUE.value[0]} to {Party.RED.value[0]}: {100.0*A.blue_to_red:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{7*A.scale:g}" style="font-size:{A.scale:g}">{Party.BLUE.value[0]} to {Party.GREEN.value[0]}: {100.0*A.blue_to_green:.1f}%</text>'
-    out += '</g>'
 
     (x0, y0) = p2c(A.start, A.start,  A)
     (x0, y100) = p2c(A.start, A.stop,   A)
@@ -502,16 +506,10 @@ def get_args(args=None) -> argparse.Namespace:
 
     parser.add_argument("--green-to-red", default=0.8, type=float,
                         help=f"{Party.GREEN.value[0]}-to-{Party.RED.value[0]} preference ratio (default: %(default)g)")
-    parser.add_argument("--green-to-blue", default=0.2, type=float,
-                        help=f"{Party.GREEN.value[0]}-to-{Party.BLUE.value[0]} preference ratio (default: %(default)g)")
     parser.add_argument(f"--red-to-green", default=0.8, type=float,
                         help=f"{Party.RED.value[0]}-to-{Party.GREEN.value[0]} preference ratio (default: %(default)g)")
-    parser.add_argument(f"--red-to-blue", default=0.2, type=float,
-                        help=f"{Party.RED.value[0]}-to-{Party.BLUE.value[0]} preference ratio (default: %(default)g)")
     parser.add_argument(f"--blue-to-red", default=0.7, type=float,
                         help=f"{Party.BLUE.value[0]}-to-{Party.RED.value[0]} preference ratio (default: %(default)g)")
-    parser.add_argument(f"--blue-to-green", default=0.3, type=float,
-                        help=f"{Party.BLUE.value[0]}-to-{Party.GREEN.value[0]} preference ratio (default: %(default)g)")
     parser.add_argument("--start", default=0.2, type=float,
                         help="minimum X and Y axis value (default: %(default)g)")
     parser.add_argument("--stop", default=0.6, type=float,
@@ -552,34 +550,19 @@ def validate_args(A: argparse.Namespace) -> argparse.Namespace:
     A.radius = 50.0 * A.scale * A.step
 
     # Clamp our preference flows...
-
     A.green_to_red = max(min(abs(A.green_to_red),  1.0), 0.0)
     A.red_to_green = max(min(abs(A.red_to_green),  1.0), 0.0)
     A.blue_to_red = max(min(abs(A.blue_to_red),   1.0), 0.0)
-    A.green_to_blue = max(min(abs(A.green_to_blue),  1.0), 0.0)
-    A.red_to_blue = max(min(abs(A.red_to_blue),  1.0), 0.0)
-    A.blue_to_green = max(min(abs(A.blue_to_green),   1.0), 0.0)
 
-    # ... and conditionally normalise them
-    red_total = A.red_to_green + A.red_to_blue
-    if red_total > 1.0:
-        A.red_to_green /= red_total
-        A.red_to_blue /= red_total
-
-    green_total = A.green_to_red + A.green_to_blue
-    if green_total > 1.0:
-        A.green_to_red /= green_total
-        A.green_to_blue /= green_total
-
-    blue_total = A.blue_to_green + A.blue_to_red
-    if blue_total > 1.0:
-        A.blue_to_green /= blue_total
-        A.blue_to_red /= blue_total
+    # Infer the inverse flows...
+    A.green_to_blue = 1.0 - A.green_to_red
+    A.red_to_blue = 1.0 - A.red_to_green
+    A.blue_to_green = 1.0 - A.blue_to_red
 
     return A
 
 
-# the main shoparty!
+# the main show!
 if __name__ == "__main__":
     try:
         A = validate_args(get_args())

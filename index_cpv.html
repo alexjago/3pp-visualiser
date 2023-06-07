@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="https://abjago.net/abjago.css">
+    <link rel="icon" type="image/png" href="https://abjago.net/icons/abj-blue.png">
+    <meta name="theme-color" content="#0080ff">
+    <meta name="Description" content="Three-Party-Preferred graph generator">
+    <title>Three-Party-Preferred graph generator</title>
+    <style type="text/css">
+        #buttons {
+            right: 6px;
+            bottom: 6px;
+            display: flex;
+
+        }
+
+        .btn {
+            font-size: 1em;
+            border: none;
+            border-radius: 6px;
+            margin-right: 6px;
+            padding: 6px 12px;
+            background-color: #eee;
+        }
+
+        .btn-primary {
+            color: #fff;
+            background-color: #0080ff;
+        }
+
+        .btn:active {
+            color: #fff;
+            background-color: #0060bb;
+        }
+    </style>
+</head>
+
+<body>
+    <!--#include file="/abj-nav-bar.html" -->
+    <div id="content">
+        <h1>Three-Party-Preferred graph generator</h1>
+
+        <p>As 3PP contests become more relevant, a need arises for analysis tools.</p>
+        <p>This page lets you enter certain preference-flow assumptions and get a graph back.</p>
+        <p>You can mouse over the dots to get a tool-tip with details of 3CPs and estimated winner and margin, based on
+            the assumed preference flows.</p>
+        <hr />
+        <p><em>Select preference flow ratios and graph bounds...</em></p>
+        <div>
+            <form method="get" target="_blank" action="https://3pp.abjago.net/wsgi" id="dlForm">
+                <label for="green_to_red">Greens-to-Labor preference ratio:</label>
+                <input type="number" min="0" max="1" step="0.01" placeholder="0.8" name="green_to_red" optional="">
+                <label for="red_to_green">Labor-to-Greens preference ratio:</label>
+                <input type="number" min="0" max="1" step="0.01" placeholder="0.8" name="red_to_green" optional="">
+                <label for="blue_to_red">Coalition-to-Labor preference ratio:</label>
+                <input type="number" min="0" max="1" step="0.01" placeholder="0.7" name="blue_to_red" optional="">
+                <br /><br />
+                <label for="start">Minimum X & Y axis value:</label>
+                <input type="number" min="0" max="0.5" step="0.01" placeholder="0.2" name="start" optional="">
+                <label for="stop">Maximum X & Y axis value:</label>
+                <input type="number" min="0" max="1" step="0.01" placeholder="0.6" name="stop" optional="">
+                <label for="step">Precision of dots:</label>
+                <input type="number" min="0" max="0.05" step="0.005" placeholder="0.01" name="step" optional="">
+                <input type="hidden" name="dl" id="dlinput">
+                <br /><br />
+                <div id="buttons" width="100%;">
+                    <button type="submit" class="btn btn-primary" style="justify-self: flex-start;">Reload
+                        Graph</button>
+                    <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
+                        Graph</button>
+                </div>
+            </form>
+            <hr />
+            <iframe src="https://abjago.net/3pp/default.svg" id="fillMe" width="100%" height="1100px"></iframe>
+            <p>This graphing tool was created at the instigation of <a href="https://twitter.com/BenMessenger8/">Ben
+                    Messenger</a>, who will be publishing further analysis.</p>
+        </div>
+    </div>
+    <script>
+        document.forms['dlForm'].addEventListener('submit', (event) => {
+            event.preventDefault();
+            let fd = new FormData(document.forms['dlForm'])
+            let search = new URLSearchParams(fd);
+            document.getElementById("fillMe").setAttribute("src", "https://3pp.abjago.net/wsgi?" + search.toString())
+        });
+
+        function downloadGraph() {
+            document.getElementById("dlinput").setAttribute("value", "true");
+            let fd = new FormData(document.forms['dlForm'])
+            let search = new URLSearchParams(fd);
+            window.open("https://3pp.abjago.net/wsgi?" + search.toString())
+            document.getElementById("dlinput").setAttribute("value", "");
+            return false;
+        }
+    </script>
+</body>
+
+</html>
