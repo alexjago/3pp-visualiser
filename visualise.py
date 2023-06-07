@@ -274,6 +274,15 @@ def draw_lines(A: argparse.Namespace) -> str:
     x2 = 1/(a2 + 3)
     y2 = (a2+1)/(a2+3)
 
+    # CORRECTION: When Blue favours Red it's G > R = B
+    # But when Blue favours Green it's R > G = B
+    # g = b = (1 - r)/2
+    # g = b = (1 - (1 - (g + b)))/2
+    # y = x
+    if a2 < 0:
+        x2 = 1/(3 - a2)
+        y2 = 1/(3 - a2)
+
     # Point #3 is the (1/3, 1/3) point ("terpoint")
     # Always some sort of boundary
     (x3, y3) = (1.0/3.0, 1.0/3.0)
@@ -286,6 +295,11 @@ def draw_lines(A: argparse.Namespace) -> str:
     a4 = A.green_to_red - A.green_to_blue
     x4 = (a4 + 1)/(a4 + 3)
     y4 = 1/(a4 + 3)
+
+    # CORRECTION: as for point #2
+    if a4 < 0:
+        x4 = 1/(3 - a4)
+        y4 = 1/(3 - a4)
 
     # Point #5 is Red vs Blue on the X axis
     # The inverse of #1
@@ -348,7 +362,9 @@ def draw_lines(A: argparse.Namespace) -> str:
     top_right = f'M {xtop:g} {ytop:g} {xright:g} {yright:g}'
 
     # OK, time to draw all the lines!
-
+    # print(f'R-G: ({x1:2.1%}, {y1:2.1%}), ({x2:2.1%}, {y2:2.1%}), ({x3:2.1%}, {y3:2.1%})',
+    #       f'R-B: ({x3:2.1%}, {y3:2.1%}), ({x4:2.1%}, {y4:2.1%}), ({x5:2.1%}, {y5:2.1%})',
+    #       f'B-G: ({x3:2.1%}, {y3:2.1%}), ({x6:2.1%}, {y6:2.1%}), ({x7:2.1%}, {y7:2.1%})', sep='\n', file=sys.stderr)
     return f'\r\n<path d="{red_green} {red_blue} {blue_green} {top_right}" class="line" />\r\n'
 
 
