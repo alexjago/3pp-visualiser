@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="https://abjago.net/abjago.css">
+    <link rel="icon" type="image/png" href="https://abjago.net/icons/abj-blue.png">
+    <meta name="theme-color" content="#0080ff">
+    <meta name="Description" content="Three-Party-Preferred graph generator">
+    <title>Three-Party-Preferred graph generator</title>
+    <style type="text/css">
+        #buttons {
+            right: 1em;
+            bottom: 1em;
+            display: flex;
+        }
+        .btn {
+            font-size: 1em;
+            font-weight: 700;
+            border: none;
+            border-radius: 1em;
+            margin-right: 1em;
+            padding: 0.5em 1em;
+            background-color: #eee;
+        }
+
+        .btn-primary {
+            color: #fff;
+            background-color: #0080ff;
+        }
+
+        .btn:active {
+            color: #fff;
+            background-color: #0060bb;
+        }
+        fieldset {
+            border-color: #0080ff;
+            border-radius: 1em;
+            border-width: 1px;
+        }
+        fieldset input {
+            margin-right: 1em;
+            margin-bottom: 1em;
+            font-size: 1em;
+            border: none;
+            font-weight: 700;
+            background-color: inherit;
+        }
+        fieldset input[type="radio"] {
+            margin-right: 0.1em;
+            padding: 1em;
+        }
+        fieldset table tr th {
+            font-weight: 400;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <!--#include file="/abj-nav-bar.html" -->
+    <div id="content">
+        <h1>Three-Party-Preferred graph generator</h1>
+
+        <p>As 3PP contests become more relevant, a need arises for analysis tools.</p>
+        <p>This page lets you enter certain preference-flow assumptions and get a graph back.</p>
+        <p>You can mouse over the dots to get a tool-tip with details of 3CPs and estimated winner and margin, based on
+            the assumed preference flows.</p>
+        <div>
+            <form method="get" target="_blank" action="https://3pp.abjago.net/wsgi" id="dlForm">
+                <fieldset><legend><p><em>Select preference flow ratios and graph bounds...</em></p></legend>
+                
+              <table>
+                <thead>
+                <tr><th>&nbsp;</th><th>from Greens</th><th>from Labor</th><th>from Coalition</th></tr>
+                </thead>
+                <tbody>
+                <tr><th scope="row">to Greens</th>
+                  <td></td>
+                  <td><input type="number" min="0" max="1" step="0.01" value="0.8" name="red_to_green" id="red_to_green" optional=""></td>
+                  <td><input type="number" min="0" max="1" step="0.01" value="0.3" name="blue_to_green" id="blue_to_green" optional=""></td>
+                </tr>
+
+                <tr><th scope="row">to Labor</th>
+                  <td><input type="number" min="0" max="1" step="0.01" value="0.8" name="green_to_red" id="green_to_red" optional=""></td>
+                  <td></td>
+                  <td><input type="number" min="0" max="1" step="0.01" value="0.7" name="blue_to_red" id="blue_to_red" optional=""></td>
+                </tr>
+
+                <tr><th scope="row">to Coalition</th>
+                  <td><input type="number" min="0" max="1" step="0.01" value="0.2" name="green_to_blue" id="green_to_blue" optional=""></td>
+                  <td><input type="number" min="0" max="1" step="0.01" value="0.2" name="red_to_blue" id="red_to_blue" optional=""></td>
+                  <td></td>
+                </tr>
+
+                </table>
+                <input type="radio" name="prefs" value="Compulsory" checked /> Compulsory preferential
+                <input type="radio" name="prefs" value="Optional" style="margin-left: 2em" /> Optional preferential
+
+                <br />
+                
+                <label for="start">Minimum X & Y axis value:</label>
+                <input type="number" min="0" max="0.5" step="0.01" value="0.2" name="start" optional="">
+                <label for="stop">Maximum X & Y axis value:</label>
+                <input type="number" min="0" max="1" step="0.01" value="0.6" name="stop" optional="">
+                <label for="step">Precision of dots:</label>
+                <input type="number" min="0" max="0.05" step="0.005" value="0.01" name="step" optional="">
+                <input type="hidden" name="dl" id="dlinput">
+                <br /><br />
+                <div id="buttons" width="100%;">
+                    <button type="submit" class="btn btn-primary" style="justify-self: flex-start;">Reload
+                        Graph</button>
+                    <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
+                        Graph</button>
+                </div>
+                </fieldset>
+            </form>
+            <br />
+            <iframe src="https://abjago.net/3pp/default.svg" id="fillMe" width="100%" height="1100px"></iframe>
+            <p>This graphing tool was created at the instigation of <a href="https://twitter.com/BenMessenger8/">Ben
+                    Messenger</a>, who will be publishing further analysis.</p>
+        </div>
+    </div>
+    <script>
+        function qs(sid) {
+            return document.querySelector(sid)
+        }
+    
+        var gtr = qs("#green_to_red");
+        var gtb = qs("#green_to_blue");
+        var rtg = qs("#red_to_green");        
+        var rtb = qs("#red_to_blue");
+        var btg = qs("#blue_to_green");
+        var btr = qs("#blue_to_red");
+
+        
+        
+        qs('input[name="prefs"]').addEventListener('change', (event) => {
+            event.preventDefault();
+            if (event.target.value = "Compulsory") {
+                // Restore CPV invariant
+                // There's a choice of ways to do this but we'll
+                // keep the relative proportions the same
+                // (rather than e.g. the votes/vote margin)
+                let bt = (+btg.value) + (+btr.value);
+                let gt = (+gtb.value) + (+gtr.value);
+                let rt = (+rtg.value) + (+rtb.value);
+
+                btg.value = btg.value / bt;
+                btr.value = btr.value / bt;                
+                gtb.value = gtb.value / gt;                
+                gtr.value = gtr.value / gt;                
+                rtb.value = rtb.value / rt;                
+                rtg.value = rtg.value / rt;                
+            } 
+          });
+
+        var dlForm = document.forms['dlForm'];
+
+        dlForm.addEventListener('change', (event) => {
+            event.preventDefault();
+            let c = (qs('input[name="prefs"]:checked').value == "Compulsory");
+                // maintain invariants:
+                // compulsory pref: sum == 1
+                // optional pref: sum <= 1
+                if ((event.target == btg) && (c || ((+btg.value + (+btr.value)) > 1))) {
+                    btr.value = 1 - btg.value
+                }
+                if ((event.target == btr) && (c || ((+btr.value + (+btg.value)) > 1))) {
+                    btg.value = 1 - btr.value
+                }
+                if ((event.target == rtg) && (c || ((+rtg.value + (+rtb.value)) > 1))) {
+                    rtb.value = 1 - rtg.value
+                }
+                if ((event.target == rtb) && (c || ((+rtb.value + (+rtg.value)) > 1))) {
+                    rtg.value = 1 - rtb.value
+                }
+                if ((event.target == gtr) && (c || ((+gtr.value + (+gtb.value)) > 1))) {
+                    gtb.value = 1 - gtr.value
+                }
+                if ((event.target == gtb) && (c || ((+gtb.value + (+gtr.value)) > 1))) {
+                    gtr.value = 1 - gtb.value
+                }
+        });
+        
+        dlForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            let fd = new FormData(dlForm)
+            let search = new URLSearchParams(fd);
+            document.getElementById("fillMe").setAttribute("src", "https://3pp.abjago.net/wsgi?" + search.toString())
+        });
+
+        function downloadGraph() {
+            document.getElementById("dlinput").setAttribute("value", "true");
+            let fd = new FormData(dlForm)
+            let search = new URLSearchParams(fd);
+            window.open("https://3pp.abjago.net/wsgi?" + search.toString())
+            document.getElementById("dlinput").setAttribute("value", "");
+            return false;
+        }
+    </script>
+</body>
+
+</html>
