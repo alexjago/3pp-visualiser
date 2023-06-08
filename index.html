@@ -77,105 +77,109 @@
 
     <p>As 3PP contests become more relevant, a need arises for analysis tools.</p>
     <p>This page lets you enter certain preference-flow assumptions and get a graph back.</p>
-    <p>You can mouse over the dots to get a tool-tip with details of 3CPs and estimated winner and margin, based on
+    <p>You can mouse over the dots to get a tool-tip with details of 3PPs and estimated winner and margin, based on
       the assumed preference flows.</p>
-    <div>
-      <form method="get" target="_blank" action="https://3pp.abjago.net/wsgi" id="dlForm">
-        <fieldset>
-          <legend>Select preference flow ratios and graph bounds</legend>
+    <form method="get" target="_blank" action="https://3pp.abjago.net/wsgi" id="dlForm">
+      <fieldset>
+        <legend>Select preference flow rates</legend>
 
-          <table>
-            <thead>
-              <tr>
-                <th>&nbsp;</th>
-                <th>from Greens</th>
-                <th>from Labor</th>
-                <th>from Coalition</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row">to Greens</th>
-                <td></td>
-                <td><input type="number" min="0" max="1" step="0.01" value="0.8" name="red_to_green" id="red_to_green"
-                    optional=""></td>
-                <td><input type="number" min="0" max="1" step="0.01" value="0.3" name="blue_to_green" id="blue_to_green"
-                    optional=""></td>
-              </tr>
+        <table>
+          <thead>
+            <tr>
+              <th>&nbsp;</th>
+              <th>from Greens</th>
+              <th>from Labor</th>
+              <th>from Coalition</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">to Greens</th>
+              <td></td>
+              <td><input type="number" min="0" max="1" step="0.01" value="0.8" name="red_to_green" id="red_to_green"
+                  optional=""></td>
+              <td><input type="number" min="0" max="1" step="0.01" value="0.3" name="blue_to_green" id="blue_to_green"
+                  optional=""></td>
+            </tr>
 
-              <tr>
-                <th scope="row">to Labor</th>
-                <td><input type="number" min="0" max="1" step="0.01" value="0.8" name="green_to_red" id="green_to_red"
-                    optional=""></td>
-                <td></td>
-                <td><input type="number" min="0" max="1" step="0.01" value="0.7" name="blue_to_red" id="blue_to_red"
-                    optional=""></td>
-              </tr>
+            <tr>
+              <th scope="row">to Labor</th>
+              <td><input type="number" min="0" max="1" step="0.01" value="0.8" name="green_to_red" id="green_to_red"
+                  optional=""></td>
+              <td></td>
+              <td><input type="number" min="0" max="1" step="0.01" value="0.7" name="blue_to_red" id="blue_to_red"
+                  optional=""></td>
+            </tr>
 
-              <tr>
-                <th scope="row">to Coalition</th>
-                <td><input type="number" min="0" max="1" step="0.01" value="0.2" name="green_to_blue" id="green_to_blue"
-                    optional=""></td>
-                <td><input type="number" min="0" max="1" step="0.01" value="0.2" name="red_to_blue" id="red_to_blue"
-                    optional=""></td>
-                <td></td>
-              </tr>
+            <tr>
+              <th scope="row">to Coalition</th>
+              <td><input type="number" min="0" max="1" step="0.01" value="0.2" name="green_to_blue" id="green_to_blue"
+                  optional=""></td>
+              <td><input type="number" min="0" max="1" step="0.01" value="0.2" name="red_to_blue" id="red_to_blue"
+                  optional=""></td>
+              <td></td>
+            </tr>
 
-          </table>
-          <input type="radio" name="prefs" value="Compulsory" checked /> Compulsory preferential
-          <input type="radio" name="prefs" value="Optional" style="margin-left: 2em" /> Optional preferential
-        </fieldset>
-        <br />
-        <fieldset>
-          <legend>Set graph layout options</legend>
-          <label for="start">Minimum X & Y axis value:</label>
-          <input type="number" min="0" max="0.5" step="0.01" value="0.2" name="start" optional="">
-          <label for="stop">Maximum X & Y axis value:</label>
-          <input type="number" min="0" max="1" step="0.01" value="0.6" name="stop" optional="">
-          <label for="step">Size of dots:</label>
-          <input type="number" min="0" max="0.05" step="0.005" value="0.01" name="step" optional="">
-        </fieldset>
-        <br />
-        <fieldset>
-          <legend>Add Points of Interest <button type="button" onclick="addPOIRow()" style="margin: 0em 1em">+</button>
-          </legend>
-          <table id="poitable">
-            <thead>
-              <tr>
-                <th>Coalition vote (X)</th>
-                <th>Greens vote (Y)</th>
-                <th>Label</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><input type="number" min="0" max="1" step="0.01" name="px" optional="" placeholder="0.43"></td>
-                <td>
-                  <input type="number" min="0" max="1" step="0.01" name="py" optional="" placeholder="0.33">
-                </td>
-                <td>
-                  <input type="text" name="pl" optional="" placeholder="Ryan 2022">
-                </td>
-                <td><button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">-</button></td>
-            </tbody>
-          </table>
-        </fieldset>
-        <br />
-        <div id="buttons" width="100%;">
-          <button type="submit" class="btn btn-primary" style="justify-self: flex-start;">Reload
-            Graph</button>
-          <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
-            Graph</button>
-        </div>
-        </fieldset>
-        <input type="hidden" name="dl" id="dlinput">
-      </form>
+        </table> <input type="radio" name="prefs" value="Compulsory" checked /> Compulsory preferential
+        <input type="radio" name="prefs" value="Optional" style="margin-left: 2em" /> Optional preferential
+      </fieldset>
       <br />
-      <iframe src="https://abjago.net/3pp/default.svg" id="fillMe" width="100%" height="1100px"></iframe>
-      <p>This graphing tool was created at the instigation of <a href="https://twitter.com/BenMessenger8/">Ben
-          Messenger</a>, who will be publishing further analysis.</p>
+      <fieldset>
+        <legend>Set graph layout options</legend>
+        <label for="start">Minimum X & Y axis value:</label>
+        <input type="number" min="0" max="0.5" step="0.01" value="0.2" name="start" optional="">
+        <label for="stop">Maximum X & Y axis value:</label>
+        <input type="number" min="0" max="1" step="0.01" value="0.6" name="stop" optional="">
+        <label for="step">Size of dots:</label>
+        <input type="number" min="0" max="0.05" step="0.005" value="0.01" name="step" optional="">
+      </fieldset>
+      <br />
+      <fieldset>
+        <legend>Add Points of Interest <button type="button" onclick="addPOIRow()" style="margin: 0em 1em">+</button>
+        </legend>
+        <table id="poitable">
+          <thead>
+            <tr>
+              <th>Coalition vote (X)</th>
+              <th>Greens vote (Y)</th>
+              <th>Label</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><input type="number" min="0" max="1" step="0.01" name="px" optional="" placeholder="0.43"></td>
+              <td>
+                <input type="number" min="0" max="1" step="0.01" name="py" optional="" placeholder="0.33">
+              </td>
+              <td>
+                <input type="text" name="pl" optional="" placeholder="Ryan 2022">
+              </td>
+              <td><button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">-</button></td>
+          </tbody>
+        </table>
+      </fieldset>
+      <br />
+      <div id="buttons" width="100%;">
+        <button type="submit" class="btn btn-primary" style="justify-self: flex-start;">Reload
+          Graph</button>
+        <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
+          Graph</button>
+      </div>
+      </fieldset>
+      <input type="hidden" name="dl" id="dlinput">
+    </form>
+    <br />
+    <div id="iwrap" width="100%"
+      style="position:relative; padding-top:100%; border-radius:1em; overflow: hidden; background-color:#fff">
+      <iframe src="https://abjago.net/3pp/default.svg" style="position:absolute; top:0; left:0; border:0;" height="100%"
+        width="100%" id="fillMe"></iframe>
     </div>
+    <p>This graphing tool was created at the instigation of <a href="https://twitter.com/BenMessenger8/">Ben
+        Messenger</a>, who has published some <a
+        href="https://www.3partypreferred.net/3partypreferred/what-is-a-three-party-preferred">further analysis.</a>
+    </p>
+    <p>Check out the source code <a href="https://github.com/alexjago/3pp-visualiser">on GitHub.</a></p>
   </div>
   <script>
     function qs(sid) {
