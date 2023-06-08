@@ -42,13 +42,19 @@
       border-width: 1px;
     }
 
+    fieldset legend {
+      font-style: italic;
+    }
+
     fieldset input {
       margin-right: 1em;
       margin-bottom: 1em;
       font-size: 1em;
       border: none;
       font-weight: 700;
-      background-color: inherit;
+      background-color: #8883;
+      border-radius: 2px;
+      padding: 2px;
       color: var(--text-color);
     }
 
@@ -76,9 +82,7 @@
     <div>
       <form method="get" target="_blank" action="https://3pp.abjago.net/wsgi" id="dlForm">
         <fieldset>
-          <legend>
-            <p><em>Select preference flow ratios and graph bounds...</em></p>
-          </legend>
+          <legend>Select preference flow ratios and graph bounds</legend>
 
           <table>
             <thead>
@@ -120,24 +124,52 @@
           </table>
           <input type="radio" name="prefs" value="Compulsory" checked /> Compulsory preferential
           <input type="radio" name="prefs" value="Optional" style="margin-left: 2em" /> Optional preferential
-
-          <br />
-
+        </fieldset>
+        <br />
+        <fieldset>
+          <legend>Set graph layout options</legend>
           <label for="start">Minimum X & Y axis value:</label>
           <input type="number" min="0" max="0.5" step="0.01" value="0.2" name="start" optional="">
           <label for="stop">Maximum X & Y axis value:</label>
           <input type="number" min="0" max="1" step="0.01" value="0.6" name="stop" optional="">
           <label for="step">Size of dots:</label>
           <input type="number" min="0" max="0.05" step="0.005" value="0.01" name="step" optional="">
-          <input type="hidden" name="dl" id="dlinput">
-          <br /><br />
-          <div id="buttons" width="100%;">
-            <button type="submit" class="btn btn-primary" style="justify-self: flex-start;">Reload
-              Graph</button>
-            <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
-              Graph</button>
-          </div>
         </fieldset>
+        <br />
+        <fieldset>
+          <legend>Add Points of Interest <button type="button" onclick="addPOIRow()" style="margin: 0em 1em">+</button>
+          </legend>
+          <table id="poitable">
+            <thead>
+              <tr>
+                <th>Coalition vote (X)</th>
+                <th>Greens vote (Y)</th>
+                <th>Label</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input type="number" min="0" max="1" step="0.01" name="px" optional="" placeholder="0.43"></td>
+                <td>
+                  <input type="number" min="0" max="1" step="0.01" name="py" optional="" placeholder="0.33">
+                </td>
+                <td>
+                  <input type="text" name="pl" optional="" placeholder="Ryan 2022">
+                </td>
+                <td><button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">-</button></td>
+            </tbody>
+          </table>
+        </fieldset>
+        <br />
+        <div id="buttons" width="100%;">
+          <button type="submit" class="btn btn-primary" style="justify-self: flex-start;">Reload
+            Graph</button>
+          <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
+            Graph</button>
+        </div>
+        </fieldset>
+        <input type="hidden" name="dl" id="dlinput">
       </form>
       <br />
       <iframe src="https://abjago.net/3pp/default.svg" id="fillMe" width="100%" height="1100px"></iframe>
@@ -211,6 +243,7 @@
       event.preventDefault();
       let fd = new FormData(dlForm)
       let search = new URLSearchParams(fd);
+      search.delete('prefs')
       document.getElementById("fillMe").setAttribute("src", "https://3pp.abjago.net/wsgi?" + search.toString())
     });
 
@@ -218,10 +251,33 @@
       document.getElementById("dlinput").setAttribute("value", "true");
       let fd = new FormData(dlForm)
       let search = new URLSearchParams(fd);
+      search.delete('prefs')
       window.open("https://3pp.abjago.net/wsgi?" + search.toString())
       document.getElementById("dlinput").setAttribute("value", "");
       return false;
     }
+
+    function addPOIRow() {
+      var ttt = qs("#poitable")
+      var row = ttt.insertRow(-1)
+      var px = row.insertCell(0)
+      var py = row.insertCell(1)
+      var pl = row.insertCell(2)
+      var delb = row.insertCell(3)
+
+      px.innerHTML = '<input type="number" min="0" max="1" step="0.01" name="px" >'
+      py.innerHTML = '<input type="number" min="0" max="1" step="0.01" name="py" >'
+      pl.innerHTML = '<input type="text" name="pl" >'
+
+      delb.innerHTML = '<button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">-</button>'
+    }
+
+    function deletePOIRow(btn) {
+      var row = btn.parentNode.parentNode;
+      row.parentNode.removeChild(row);
+    }
+
+    // addPOIRow();
   </script>
 </body>
 

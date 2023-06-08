@@ -90,7 +90,7 @@ def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argpa
         blue_2cp = blue_pct + (A.green_to_blue * green_pct)
         margin = red_2cp / (red_2cp + blue_2cp) - 0.5
         if gt(red_2cp, blue_2cp):
-            return (Party.RED, margin)
+            return (Party.RED, red_2cp)
         elif gt(blue_2cp, margin):
             return (Party.BLUE, -margin)
     if lt(blue_pct, green_pct) and lt(blue_pct, red_pct):
@@ -374,11 +374,7 @@ def draw_lines(A: argparse.Namespace) -> str:
 def draw_pois(A: argparse.Namespace) -> str:
     """Draw points of interest, as appearing in the specified CSV file"""
 
-    out = ""
-
-    import csv
-    rdr = csv.reader(sys.stdin if A.input == "-" else open(A.input, 'r'))
-    for row in rdr:
+    def inner(row):
         try:
             r0 = float(row[0])
             r1 = float(row[1])
@@ -397,12 +393,25 @@ def draw_pois(A: argparse.Namespace) -> str:
                     ".0%", "%")
             except TypeError:  # ties A.n
                 tooltip += "\nWinner: TIE"
-            out += f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="d poi"><title>{tooltip}</title></circle>\r\n'
+            return  f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="d poi"><title>{tooltip}</title></circle>\r\n'
 
         except (TypeError, IndexError, ValueError) as e:
             print("Could not parse input row:", e, file=sys.stderr)
             print(row, file=sys.stderr)
+            return ''
 
+
+    out = ""
+
+    for row in A.point:
+        out += inner(row)
+        
+    if A.input:
+        import csv
+        rdr = csv.reader(sys.stdin if A.input == "-" else open(A.input, 'r'))
+        for row in rdr:
+            out += inner(row)
+        
     return out
 
 
@@ -463,7 +472,7 @@ def construct_svg(A: argparse.Namespace) -> str:
     out += draw_lines(A)
 
     # place points of interest
-    if A.input:
+    if A.input or A.point:
         out += draw_pois(A)
 
     # Draw labels stating preference assumptions
@@ -545,6 +554,7 @@ def get_args(args=None) -> argparse.Namespace:
                         help="place axis marks at these values (default: every 10%%)")
     parser.add_argument("--css", metavar='FILE',
                         type=argparse.FileType('r'), help="Use CSS from specified file")
+    parser.add_argument("--point", metavar=('X', 'Y', 'LABEL'), nargs=3, action='append', help="Specify a point of interest")
     parser.add_argument(
         "--input", "-i", help="input CSV of points of interest (format: x, y, label) (pass - for standard input)")
     parser.add_argument("--output", "-o", type=argparse.FileType('w'),
@@ -602,7 +612,7 @@ def validate_args(A: argparse.Namespace) -> argparse.Namespace:
 if __name__ == "__main__":
     try:
         A = validate_args(get_args())
-        # print(A, file=sys.stderr)
+        print(A, file=sys.stderr)
         print(construct_svg(A), file=A.output)
     except ValueError as e:
         print(e, file=sys.stderr)

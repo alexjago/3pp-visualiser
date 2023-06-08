@@ -33,6 +33,17 @@ def make_args(query_dict):
     # and keep this reasonable too
     A.step = max(0.005, A.step)
 
+    if 'px' in query_dict and 'py' in query_dict and 'pl' in query_dict:
+        A.point = []
+        for i in range(len(query_dict['px'])):
+            try:
+                px = float(query_dict['px'][i])
+                py = float(query_dict['py'][i])
+                pl = esc(query_dict['pl'][i])
+                A.point.append([px, py, pl])
+            except:
+                continue
+
     return visualise.validate_args(A)
 
 
