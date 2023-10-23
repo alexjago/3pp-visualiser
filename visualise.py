@@ -438,12 +438,12 @@ def construct_svg(A: argparse.Namespace) -> str:
         <path d="M 0 0 L 10 5 L 0 10 z"/> \
         </marker>' + \
         """<filter id="keylineEffect" color-interpolation-filters="sRGB">
-            <feMorphology in="SourceGraphic" result="MORPH" operator="dilate" radius="1.5"/>
-            <feComponentTransfer result="KEYLINE">
-                <!-- invert colors -->
-                <feFuncR type="linear" slope="-1" intercept="1" />
-                <feFuncG type="linear" slope="-1" intercept="1" />
-                <feFuncB type="linear" slope="-1" intercept="1" />
+            <feMorphology in="SourceGraphic" operator="dilate" radius="2"/>
+            <feColorMatrix type="saturate" values="0" />
+            <feComponentTransfer in="greyed" result="KEYLINE">
+                <feFuncR type="discrete" tableValues="1 0" />
+                <feFuncG type="discrete" tableValues="1 0" />
+                <feFuncB type="discrete" tableValues="1 0" />
             </feComponentTransfer>
             <feMerge>
                 <feMergeNode in="KEYLINE"/>
