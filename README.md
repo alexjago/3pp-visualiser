@@ -2,7 +2,11 @@
 
 As 3PP contests become more relevant, a need arises for analysis tools.
 
-This repo contains a Python script to generate SVG graphs of 3PP contests, plus tooling to put it online.
+This repo contains:
+
+- a Python SVG generator (`visualise.py`)
+- a WSGI endpoint (`threeparty.py`)
+- a Jekyll page wrapper (`index.md`) that includes the interactive form (`form.html`)
 
 ## Using the script locally
 
@@ -51,6 +55,23 @@ CLI:
 WSGI/query string:
 
     /wsgi?x_name=Coalition&y_name=Greens&z_name=Labor&x_colour=%230088ee&y_colour=%2300aa22&z_colour=%23dd0044&x_to_y=0.3&x_to_z=0.7&y_to_x=0.2&y_to_z=0.8&z_to_x=0.2&z_to_y=0.8
+
+### Points of interest over the web
+
+Points of interest (POIs) work in the hosted form and directly via query params.
+
+- Repeated params are supported:
+  - `px`: X value
+  - `py`: Y value
+  - `pl`: label
+- Each row is formed by matching the same index across `px[]`, `py[]`, `pl[]`.
+- POIs are shown as outlined markers with tooltip details and winner estimate.
+
+Example:
+
+    /wsgi?x_to_y=0.3&x_to_z=0.7&y_to_x=0.2&y_to_z=0.8&z_to_x=0.2&z_to_y=0.8&px=0.43&py=0.33&pl=Ryan%202022&px=0.36&py=0.29&pl=Brisbane%20sample
+
+Note: the web form accepts percentages, but converts them to decimal ratios (`0..1`) before request.
 
 # README - WSGI
 
@@ -115,8 +136,3 @@ Test your configuration with `sudo nginx -t` and then reload to activate:
     sudo systemctl reload nginx
 
 You should now be able to use the site. (If not, the log file location is specified in the `.ini`)
-
-
-# TODO
-
-* points of interest that work over the web

@@ -2,17 +2,38 @@
 form table tr th {
   font-weight: normal;
 }
+
+fieldset label {
+  margin-right: 1ch;
+}
+
+fieldset input {
+  margin-right: 4ch;
+}
+
+fieldset input[type="radio"] {
+  margin-right: 1ch;
+}
+
+fieldset input[type="radio"] + label {
+  margin-right: 4ch;
+}
+
 #matchup-table th,
 #matchup-table td {
   vertical-align: baseline;
 }
 
 #matchup-table input[type="color"] {
-  width: 3.2em;
+  width: 4em;
   height: 1.8em;
   padding: 0;
   position: relative;
   top: 3px;
+}
+
+#matchup-table input[type="text"] {
+  width: 40ch;
 }
 
 #matchup-table .role-note {
@@ -26,13 +47,6 @@ form table tr th {
   <fieldset>
 	<legend>Matchup</legend>
 	<table id="matchup-table">
-	  <thead>
-		<tr>
-		  <th>&nbsp;</th>
-		  <th>&nbsp;</th>
-		  <th>&nbsp;</th>
-		</tr>
-	  </thead>
 	  <tbody>
 		<tr>
 		  <td><input type="text" value="Coalition" name="x_name" id="x_name"></td>
@@ -93,8 +107,11 @@ form table tr th {
 		  <td></td>
 		</tr>
 
-	</table> <input type="radio" name="prefs" value="Compulsory" checked /> Compulsory preferential
-	<input type="radio" name="prefs" value="Optional" style="margin-left: 2em" /> Optional preferential
+	</table>
+	<input type="radio" name="prefs" id="prefs_compulsory" value="Compulsory" checked />
+	<label for="prefs_compulsory">Compulsory preferential</label>
+	<input type="radio" name="prefs" id="prefs_optional" value="Optional" />
+	<label for="prefs_optional">Optional preferential</label>
   </fieldset>
   <br />
   <fieldset>
