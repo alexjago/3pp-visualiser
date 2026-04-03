@@ -8,6 +8,50 @@ This repo contains a Python script to generate SVG graphs of 3PP contests, plus 
 
 Download and run `visualise.py`. There are no dependencies other than modern Python 3. 
 
+### Matchup and flow parameters
+
+The generator now supports configurable party labels/colours using canonical `x/y/z` roles:
+
+- `x`: X-axis party
+- `y`: Y-axis party
+- `z`: balance party (`1 - (x + y)`)
+
+#### Canonical parameters
+
+- Party names: `x_name`, `y_name`, `z_name`
+- Party colours: `x_colour`, `y_colour`, `z_colour` (hex, eg `#0088ee`)
+- Flows: `x_to_y`, `x_to_z`, `y_to_x`, `y_to_z`, `z_to_x`, `z_to_y`
+
+Defaults remain equivalent to the original setup:
+
+- `x = Coalition`, `y = Greens`, `z = Labor`
+- `x_to_y=0.3`, `x_to_z=0.7`
+- `y_to_x=0.2`, `y_to_z=0.8`
+- `z_to_x=0.2`, `z_to_y=0.8`
+
+#### Backward compatibility aliases
+
+Legacy flow parameter names are still accepted:
+
+- `blue_to_green -> x_to_y`
+- `blue_to_red -> x_to_z`
+- `green_to_blue -> y_to_x`
+- `green_to_red -> y_to_z`
+- `red_to_blue -> z_to_x`
+- `red_to_green -> z_to_y`
+
+If both canonical and legacy forms are supplied, canonical `x/y/z` values take precedence.
+
+#### Examples
+
+CLI:
+
+    python3 visualise.py --x-name "Coalition" --y-name "Greens" --z-name "Labor" --x-to-y 0.3 --x-to-z 0.7 --y-to-x 0.2 --y-to-z 0.8 --z-to-x 0.2 --z-to-y 0.8 > out.svg
+
+WSGI/query string:
+
+    /wsgi?x_name=Coalition&y_name=Greens&z_name=Labor&x_colour=%230088ee&y_colour=%2300aa22&z_colour=%23dd0044&x_to_y=0.3&x_to_z=0.7&y_to_x=0.2&y_to_z=0.8&z_to_x=0.2&z_to_y=0.8
+
 # README - WSGI
 
 This folder contains a WSGI application intended for use with uWSGI (`threeparty.py`), and corresponding configuration files.

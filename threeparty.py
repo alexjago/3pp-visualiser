@@ -1,8 +1,5 @@
-from multiprocessing.sharedctypes import Value
 import urllib.parse
 import os.path
-import re
-import argparse
 
 # local copy
 import visualise
@@ -21,9 +18,18 @@ def make_args(query_dict):
 
     A = visualise.get_args("")
 
-    for k in query_dict:
-        if k in vars(A):
-            vars(A)[k] = float(query_dict[k][0])
+    string_fields = {"x_name", "y_name", "z_name", "x_colour", "y_colour", "z_colour"}
+
+    for k, values in query_dict.items():
+        if k not in vars(A) or not values:
+            continue
+        if k in string_fields:
+            vars(A)[k] = values[0]
+            continue
+        try:
+            vars(A)[k] = float(values[0])
+        except (TypeError, ValueError):
+            continue
 
     # Not these though. #blocked
     A.css = None
@@ -32,6 +38,27 @@ def make_args(query_dict):
     A.marks = [i/10.0 for i in range(0, 10)]
     # and keep this reasonable too
     A.step = max(0.005, A.step)
+
+    # Canonical flow params always override legacy aliases when both exist
+    flow_aliases = {
+        "x_to_y": "blue_to_green",
+        "x_to_z": "blue_to_red",
+        "y_to_x": "green_to_blue",
+        "y_to_z": "green_to_red",
+        "z_to_x": "red_to_blue",
+        "z_to_y": "red_to_green",
+    }
+    for canonical, legacy in flow_aliases.items():
+        if canonical in query_dict and query_dict[canonical]:
+            try:
+                vars(A)[canonical] = float(query_dict[canonical][0])
+            except (TypeError, ValueError):
+                pass
+        elif legacy in query_dict and query_dict[legacy]:
+            try:
+                vars(A)[canonical] = float(query_dict[legacy][0])
+            except (TypeError, ValueError):
+                pass
 
     if 'px' in query_dict and 'py' in query_dict and 'pl' in query_dict:
         A.point = []
@@ -54,8 +81,9 @@ def application(env, start_response):
 
     # print(env)
 
-    doc_root = env["DOCUMENT_ROOT"]
-    page_root = os.path.dirname(env["PATH_INFO"])[1:]  # drop leading /
+    # Present behind nginx/uWSGI, but may be absent in local WSGI servers.
+    doc_root = env.get("DOCUMENT_ROOT", "")
+    page_root = os.path.dirname(env.get("PATH_INFO", ""))[1:]  # drop leading /
 
     # do intelligent things based on env['QUERY_STRING']
     query_dict = urllib.parse.parse_qs(env["QUERY_STRING"])

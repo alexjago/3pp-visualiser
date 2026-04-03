@@ -13,6 +13,8 @@ import sys
 import math
 from enum import Enum
 import argparse
+import re
+from xml.sax.saxutils import escape
 DEFAULT_CSS = """
 text {font-family: sans-serif; font-size: 10px; fill: #222;}
 text.label {filter: url(#keylineEffect); font-weight: bold}
@@ -30,6 +32,8 @@ text.label {filter: url(#keylineEffect); font-weight: bold}
 .arrow {fill:none; stroke:#111; stroke-width:0.5%; stroke-dasharray:4 2; stroke-dashoffset:0;}
 .bg {fill: #fff}
 #preflabel {opacity: 0.9}
+text.axis {text-anchor: middle; fill:#222;}
+path.axis {stroke: #222; stroke-width: 2px;}
 """
 
 
@@ -41,6 +45,42 @@ class Party(Enum):
 # NOTE: throughout this file we'll use a variable called `A` to store our general state
 # This replaces the original and pervasive use of globals.
 # Default values are set in `get_args`
+
+VALID_COLOUR = re.compile(r'^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$')
+
+
+def esc_text(text: str) -> str:
+    """XML escape text and normalise control whitespace."""
+    return escape(
+        str(text), {"\n": " ", "\t": " ", "\b": " ", "\r": " ", "\f": " "}
+    )
+
+
+def party_name(party: Party, A: argparse.Namespace) -> str:
+    """Return escaped display name for a party enum value."""
+    if party == Party.BLUE:
+        return esc_text(A.x_name)
+    if party == Party.GREEN:
+        return esc_text(A.y_name)
+    return esc_text(A.z_name)
+
+
+def party_colour(party: Party, A: argparse.Namespace) -> str:
+    """Return configured colour for a party enum value."""
+    if party == Party.BLUE:
+        return A.x_colour
+    if party == Party.GREEN:
+        return A.y_colour
+    return A.z_colour
+
+
+def normalise_colour(value: str, fallback: str) -> str:
+    """Ensure a colour value is a safe hex literal."""
+    if isinstance(value, str):
+        candidate = value.strip()
+        if VALID_COLOUR.fullmatch(candidate):
+            return candidate.lower()
+    return fallback
 
 
 def p2c(blue_pct: float, green_pct: float, A: argparse.Namespace) -> Tuple[float, float]:
@@ -77,8 +117,8 @@ def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argpa
     # need to figure out who came third, then who won
     if lt(red_pct, green_pct) and lt(red_pct, blue_pct):
         # Red came third
-        green_2cp = green_pct + (A.red_to_green * red_pct)
-        blue_2cp = blue_pct + (A.red_to_blue * red_pct)
+        green_2cp = green_pct + (A.z_to_y * red_pct)
+        blue_2cp = blue_pct + (A.z_to_x * red_pct)
         margin = green_2cp / (green_2cp + blue_2cp) - 0.5
         if gt(green_2cp, blue_2cp):
             return (Party.GREEN, margin)
@@ -86,8 +126,8 @@ def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argpa
             return (Party.BLUE, -margin)
     if lt(green_pct, red_pct) and lt(green_pct, blue_pct):
         # Green came third
-        red_2cp = red_pct + (A.green_to_red * green_pct)
-        blue_2cp = blue_pct + (A.green_to_blue * green_pct)
+        red_2cp = red_pct + (A.y_to_z * green_pct)
+        blue_2cp = blue_pct + (A.y_to_x * green_pct)
         margin = red_2cp / (red_2cp + blue_2cp) - 0.5
         if gt(red_2cp, blue_2cp):
             return (Party.RED, red_2cp)
@@ -95,8 +135,8 @@ def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argpa
             return (Party.BLUE, -margin)
     if lt(blue_pct, green_pct) and lt(blue_pct, red_pct):
         # Blue came third
-        red_2cp = red_pct + (A.blue_to_red * blue_pct)
-        green_2cp = green_pct + (A.blue_to_green * blue_pct)
+        red_2cp = red_pct + (A.x_to_z * blue_pct)
+        green_2cp = green_pct + (A.x_to_y * blue_pct)
         margin = red_2cp / (green_2cp + red_2cp) - 0.5
         if gt(red_2cp, green_2cp):
             return (Party.RED, margin)
@@ -156,12 +196,13 @@ def construct_dot(blue_pct: float, green_pct: float, A: argparse.Namespace) -> s
 
     (x, y) = p2c(blue_pct, green_pct, A)
 
-    tooltip_3cp = f"{Party.GREEN.value[0]}: {green_pct:.1%}, {Party.RED.value[0]}: {red_pct:.1%}, {Party.BLUE.value[0]}: {blue_pct:.1%}."
+    tooltip_3cp = f"{party_name(Party.GREEN, A)}: {green_pct:.1%}, {party_name(Party.RED, A)}: {red_pct:.1%}, {party_name(Party.BLUE, A)}: {blue_pct:.1%}."
 
     try:
         (winner, margin) = calculate_winner(red_pct, green_pct, blue_pct, A)
-        tooltip = f"{tooltip_3cp} Winner: {(winner.value)[0]} {margin:.1%}"
-        return f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="{(winner.value)[1]} d"><title>{tooltip}</title></circle>'.replace(".0%", "%")
+        tooltip = f"{tooltip_3cp} Winner: {party_name(winner, A)} {margin:.1%}"
+        fill = party_colour(winner, A)
+        return f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="d" style="fill:{fill}"><title>{tooltip}</title></circle>'.replace(".0%", "%")
 
     except TypeError:  # raised on a tie
         tooltip = f"{tooltip_3cp} Winner: TIE"
@@ -258,12 +299,12 @@ def draw_lines(A: argparse.Namespace) -> str:
     """Draw change-of-winner lines."""
 
     # Point #1, the Green vs Red point on the Y axis, is at
-    # g + A.blue_to_green * b == r + A.blue_to_red * b
-    # g = r + (A.blue_to_red * b) - (A.blue_to_green * b)
-    # g = (1 - (b + g)) + (A.blue_to_red - A.blue_to_green) * b
-    # 2g = (1 - b) + (A.blue_to_red - A.blue_to_green) * b
+    # g + A.x_to_y * b == r + A.x_to_z * b
+    # g = r + (A.x_to_z * b) - (A.x_to_y * b)
+    # g = (1 - (b + g)) + (A.x_to_z - A.x_to_y) * b
+    # 2g = (1 - b) + (A.x_to_z - A.x_to_y) * b
     x1 = A.start
-    y1 = ((1 - x1) + (A.blue_to_red - A.blue_to_green) * x1)/2.0
+    y1 = ((1 - x1) + (A.x_to_z - A.x_to_y) * x1)/2.0
 
     # Point #2 is the Green vs Red midpoint
     # It is paramaterised by the ex-Blue split
@@ -271,9 +312,9 @@ def draw_lines(A: argparse.Namespace) -> str:
     # r = b = (1 - g)/2
     # or alternatively the `y = 1 - 2x` line
     # While the line between here and point #1 marks the G vs R 2CP
-    # y = ((1 - x) + (A.blue_to_red - A.blue_to_green)*x)/2
+    # y = ((1 - x) + (A.x_to_z - A.x_to_y)*x)/2
     # Point #2 is at the intersection of these lines
-    a2 = A.blue_to_red - A.blue_to_green
+    a2 = A.x_to_z - A.x_to_y
     x2 = 1/(a2 + 3)
     y2 = (a2+1)/(a2+3)
 
@@ -295,7 +336,7 @@ def draw_lines(A: argparse.Namespace) -> str:
 
     # Point #4 is the Red vs Blue midpoint.
     # Basically the inverse of #2, parameterised by ex-Green split
-    a4 = A.green_to_red - A.green_to_blue
+    a4 = A.y_to_z - A.y_to_x
     x4 = (a4 + 1)/(a4 + 3)
     y4 = 1/(a4 + 3)
 
@@ -324,7 +365,7 @@ def draw_lines(A: argparse.Namespace) -> str:
     # degenerates to terpoint if equal ex-Red split
 
     # Set the following for convenience
-    a6 = A.red_to_blue - A.red_to_green
+    a6 = A.z_to_x - A.z_to_y
 
     # green-blue line at
     # green + A.red_to_green * red == blue + A.red_to_blue * red
@@ -384,12 +425,12 @@ def draw_pois(A: argparse.Namespace) -> str:
 
             r2 = row[2] if len(row) > 2 else ""
             (x, y) = p2c(r0, r1, A)
-            tooltip = f"{r2}\n{Party.GREEN.value[0]}: {r1:.1%}, {Party.RED.value[0]}: {(1 - (r1+r0)):.1%}, {Party.BLUE.value[0]}: {r0:.1%}.".replace(
+            tooltip = f"{esc_text(r2)}\n{party_name(Party.GREEN, A)}: {r1:.1%}, {party_name(Party.RED, A)}: {(1 - (r1+r0)):.1%}, {party_name(Party.BLUE, A)}: {r0:.1%}.".replace(
                 ".0%", "%")
 
             try:
                 (winner, margin) = calculate_winner(1 - (r0 + r1), r1, r0, A)
-                tooltip += f"\nWinner: {winner.value[0]} {margin:.1%}".replace(
+                tooltip += f"\nWinner: {party_name(winner, A)} {margin:.1%}".replace(
                     ".0%", "%")
             except TypeError:  # ties A.n
                 tooltip += "\nWinner: TIE"
@@ -479,12 +520,12 @@ def construct_svg(A: argparse.Namespace) -> str:
     out += '<g id="preflabel">'
     # place a rect
     out += f'<rect width="{A.scale*13:g}" height="{6.5*A.scale:g}" x="{A.width - A.scale*12.5:g}" y="{A.scale:g}" class="bg"/>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{2*A.scale:g}" style="font-size:{A.scale:g}">{Party.RED.value[0]} to {Party.GREEN.value[0]}: {100.0*A.red_to_green:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{3*A.scale:g}" style="font-size:{A.scale:g}">{Party.RED.value[0]} to {Party.BLUE.value[0]}: {100.0*A.red_to_blue:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{4*A.scale:g}" style="font-size:{A.scale:g}">{Party.GREEN.value[0]} to {Party.RED.value[0]}: {100.0*A.green_to_red:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{5*A.scale:g}" style="font-size:{A.scale:g}">{Party.GREEN.value[0]} to {Party.BLUE.value[0]}: {100.0*A.green_to_blue:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{6*A.scale:g}" style="font-size:{A.scale:g}">{Party.BLUE.value[0]} to {Party.RED.value[0]}: {100.0*A.blue_to_red:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{7*A.scale:g}" style="font-size:{A.scale:g}">{Party.BLUE.value[0]} to {Party.GREEN.value[0]}: {100.0*A.blue_to_green:.1f}%</text>'
+    out += f'<text x="{A.width - A.scale*12:g}" y="{2*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.z_name)} to {esc_text(A.y_name)}: {100.0*A.z_to_y:.1f}%</text>'
+    out += f'<text x="{A.width - A.scale*12:g}" y="{3*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.z_name)} to {esc_text(A.x_name)}: {100.0*A.z_to_x:.1f}%</text>'
+    out += f'<text x="{A.width - A.scale*12:g}" y="{4*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.y_name)} to {esc_text(A.z_name)}: {100.0*A.y_to_z:.1f}%</text>'
+    out += f'<text x="{A.width - A.scale*12:g}" y="{5*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.y_name)} to {esc_text(A.x_name)}: {100.0*A.y_to_x:.1f}%</text>'
+    out += f'<text x="{A.width - A.scale*12:g}" y="{6*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.x_name)} to {esc_text(A.z_name)}: {100.0*A.x_to_z:.1f}%</text>'
+    out += f'<text x="{A.width - A.scale*12:g}" y="{7*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.x_name)} to {esc_text(A.y_name)}: {100.0*A.x_to_y:.1f}%</text>'
     out += '</g>'
 
     (x0, y0) = p2c(A.start, A.start,  A)
@@ -493,7 +534,7 @@ def construct_svg(A: argparse.Namespace) -> str:
 
     # Draw Y axis
     out += f'<path d="M {x0:g} {A.width:g} V {y100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
-    out += f'<text transform="translate({(x0 - (A.offset - 1)*A.scale):g}, {A.width/2 :g}) rotate(270)" style="text-anchor:middle">{Party.GREEN.value[0]} 3CP</text>'
+    out += f'<text transform="translate({(x0 - (A.offset - 1)*A.scale):g}, {A.width/2 :g}) rotate(270)" style="text-anchor:middle">{esc_text(A.y_name)} 3CP</text>'
 
     for g in A.marks:
         if g > A.start and g <= (A.stop):
@@ -503,7 +544,7 @@ def construct_svg(A: argparse.Namespace) -> str:
 
     # Draw X axis
     out += f'<path d="M {0:g} {y0:g} H {x100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
-    out += f'<text x="{A.width/2:g}" y="{y0 + 3.5*A.scale:g}" style="text-anchor:middle">{Party.BLUE.value[0]} 3CP</text>'
+    out += f'<text x="{A.width/2:g}" y="{y0 + 3.5*A.scale:g}" style="text-anchor:middle">{esc_text(A.x_name)} 3CP</text>'
 
     for b in A.marks:
         if b > A.start and b <= (A.stop):
@@ -522,24 +563,53 @@ def get_args(args=None) -> argparse.Namespace:
     DEFAULT VALUES are set here."""
     import argparse
 
-    parser = argparse.ArgumentParser(description=f"Three-Candidate-Preferred Visualiser.\
-        Constructs a 2D graph with {Party.BLUE.value[0]} on the X-axis, \
-        {Party.GREEN.value[0]} on the Y-axis, and dots shaded by winning party.\
+    parser = argparse.ArgumentParser(description="Three-Candidate-Preferred Visualiser.\
+        Constructs a 2D graph with configurable X-axis and Y-axis parties, \
+        and dots shaded by winning party.\
         Prints an SVG to standard output and optionally takes a CSV of points of interest.\
         N.B. all numeric values should be between zero and one.")
 
+    # Matchup configuration
+    parser.add_argument("--x-name", default="Coalition", type=str,
+                        help="Name of X-axis party (default: %(default)s)")
+    parser.add_argument("--y-name", default="Greens", type=str,
+                        help="Name of Y-axis party (default: %(default)s)")
+    parser.add_argument("--z-name", default="Labor", type=str,
+                        help="Name of balance party (default: %(default)s)")
+    parser.add_argument("--x-colour", default="#08e", type=str,
+                        help="Colour of X-axis winning dots, hex format (default: %(default)s)")
+    parser.add_argument("--y-colour", default="#0a2", type=str,
+                        help="Colour of Y-axis winning dots, hex format (default: %(default)s)")
+    parser.add_argument("--z-colour", default="#d04", type=str,
+                        help="Colour of balance-party winning dots, hex format (default: %(default)s)")
+
+    # Canonical flow parameters
+    parser.add_argument("--x-to-y", default=None, type=float,
+                        help="X-to-Y preference ratio")
+    parser.add_argument("--x-to-z", default=None, type=float,
+                        help="X-to-Z preference ratio")
+    parser.add_argument("--y-to-x", default=None, type=float,
+                        help="Y-to-X preference ratio")
+    parser.add_argument("--y-to-z", default=None, type=float,
+                        help="Y-to-Z preference ratio")
+    parser.add_argument("--z-to-x", default=None, type=float,
+                        help="Z-to-X preference ratio")
+    parser.add_argument("--z-to-y", default=None, type=float,
+                        help="Z-to-Y preference ratio")
+
+    # Legacy aliases (retained for backward compatibility)
     parser.add_argument("--green-to-red", default=0.8, type=float,
-                        help=f"{Party.GREEN.value[0]}-to-{Party.RED.value[0]} preference ratio (default: %(default)g)")
+                        help="Legacy alias for --y-to-z")
     parser.add_argument("--green-to-blue", default=0.2, type=float,
-                        help=f"{Party.GREEN.value[0]}-to-{Party.BLUE.value[0]} preference ratio (default: %(default)g)")
-    parser.add_argument(f"--red-to-green", default=0.8, type=float,
-                        help=f"{Party.RED.value[0]}-to-{Party.GREEN.value[0]} preference ratio (default: %(default)g)")
-    parser.add_argument(f"--red-to-blue", default=0.2, type=float,
-                        help=f"{Party.RED.value[0]}-to-{Party.BLUE.value[0]} preference ratio (default: %(default)g)")
-    parser.add_argument(f"--blue-to-red", default=0.7, type=float,
-                        help=f"{Party.BLUE.value[0]}-to-{Party.RED.value[0]} preference ratio (default: %(default)g)")
-    parser.add_argument(f"--blue-to-green", default=0.3, type=float,
-                        help=f"{Party.BLUE.value[0]}-to-{Party.GREEN.value[0]} preference ratio (default: %(default)g)")
+                        help="Legacy alias for --y-to-x")
+    parser.add_argument("--red-to-green", default=0.8, type=float,
+                        help="Legacy alias for --z-to-y")
+    parser.add_argument("--red-to-blue", default=0.2, type=float,
+                        help="Legacy alias for --z-to-x")
+    parser.add_argument("--blue-to-red", default=0.7, type=float,
+                        help="Legacy alias for --x-to-z")
+    parser.add_argument("--blue-to-green", default=0.3, type=float,
+                        help="Legacy alias for --x-to-y")
     parser.add_argument("--start", default=0.2, type=float,
                         help="minimum X and Y axis value (default: %(default)g)")
     parser.add_argument("--stop", default=0.6, type=float,
@@ -564,6 +634,36 @@ def get_args(args=None) -> argparse.Namespace:
 
 
 def validate_args(A: argparse.Namespace) -> argparse.Namespace:
+    # Canonical flow values (x/y/z) with legacy fallback aliases
+    if A.x_to_y is None:
+        A.x_to_y = A.blue_to_green
+    if A.x_to_z is None:
+        A.x_to_z = A.blue_to_red
+    if A.y_to_x is None:
+        A.y_to_x = A.green_to_blue
+    if A.y_to_z is None:
+        A.y_to_z = A.green_to_red
+    if A.z_to_x is None:
+        A.z_to_x = A.red_to_blue
+    if A.z_to_y is None:
+        A.z_to_y = A.red_to_green
+
+    # Keep legacy fields in sync for any downstream compatibility code
+    A.blue_to_green = A.x_to_y
+    A.blue_to_red = A.x_to_z
+    A.green_to_blue = A.y_to_x
+    A.green_to_red = A.y_to_z
+    A.red_to_blue = A.z_to_x
+    A.red_to_green = A.z_to_y
+
+    # Normalise labels and colours
+    A.x_name = (str(A.x_name).strip() or "Coalition")
+    A.y_name = (str(A.y_name).strip() or "Greens")
+    A.z_name = (str(A.z_name).strip() or "Labor")
+    A.x_colour = normalise_colour(A.x_colour, "#08e")
+    A.y_colour = normalise_colour(A.y_colour, "#0a2")
+    A.z_colour = normalise_colour(A.z_colour, "#d04")
+
     # Clamp A.step to be in a reasonable range
     A.step = max(min(abs(A.step), 0.05), 0.002)
 
@@ -582,28 +682,36 @@ def validate_args(A: argparse.Namespace) -> argparse.Namespace:
 
     # Clamp our preference flows...
 
-    A.green_to_red = max(min(abs(A.green_to_red),  1.0), 0.0)
-    A.red_to_green = max(min(abs(A.red_to_green),  1.0), 0.0)
-    A.blue_to_red = max(min(abs(A.blue_to_red),   1.0), 0.0)
-    A.green_to_blue = max(min(abs(A.green_to_blue),  1.0), 0.0)
-    A.red_to_blue = max(min(abs(A.red_to_blue),  1.0), 0.0)
-    A.blue_to_green = max(min(abs(A.blue_to_green),   1.0), 0.0)
+    A.y_to_z = max(min(abs(A.y_to_z), 1.0), 0.0)
+    A.z_to_y = max(min(abs(A.z_to_y), 1.0), 0.0)
+    A.x_to_z = max(min(abs(A.x_to_z), 1.0), 0.0)
+    A.y_to_x = max(min(abs(A.y_to_x), 1.0), 0.0)
+    A.z_to_x = max(min(abs(A.z_to_x), 1.0), 0.0)
+    A.x_to_y = max(min(abs(A.x_to_y), 1.0), 0.0)
 
     # ... and conditionally normalise them
-    red_total = A.red_to_green + A.red_to_blue
-    if red_total > 1.0:
-        A.red_to_green /= red_total
-        A.red_to_blue /= red_total
+    z_total = A.z_to_y + A.z_to_x
+    if z_total > 1.0:
+        A.z_to_y /= z_total
+        A.z_to_x /= z_total
 
-    green_total = A.green_to_red + A.green_to_blue
-    if green_total > 1.0:
-        A.green_to_red /= green_total
-        A.green_to_blue /= green_total
+    y_total = A.y_to_z + A.y_to_x
+    if y_total > 1.0:
+        A.y_to_z /= y_total
+        A.y_to_x /= y_total
 
-    blue_total = A.blue_to_green + A.blue_to_red
-    if blue_total > 1.0:
-        A.blue_to_green /= blue_total
-        A.blue_to_red /= blue_total
+    x_total = A.x_to_y + A.x_to_z
+    if x_total > 1.0:
+        A.x_to_y /= x_total
+        A.x_to_z /= x_total
+
+    # Keep legacy aliases synced after normalisation
+    A.blue_to_green = A.x_to_y
+    A.blue_to_red = A.x_to_z
+    A.green_to_blue = A.y_to_x
+    A.green_to_red = A.y_to_z
+    A.red_to_blue = A.z_to_x
+    A.red_to_green = A.z_to_y
 
     return A
 
