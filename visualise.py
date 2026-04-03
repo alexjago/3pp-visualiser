@@ -518,14 +518,32 @@ def construct_svg(A: argparse.Namespace) -> str:
 
     # Draw labels stating preference assumptions
     out += '<g id="preflabel">'
-    # place a rect
-    out += f'<rect width="{A.scale*13:g}" height="{6.5*A.scale:g}" x="{A.width - A.scale*12.5:g}" y="{A.scale:g}" class="bg"/>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{2*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.z_name)} to {esc_text(A.y_name)}: {100.0*A.z_to_y:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{3*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.z_name)} to {esc_text(A.x_name)}: {100.0*A.z_to_x:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{4*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.y_name)} to {esc_text(A.z_name)}: {100.0*A.y_to_z:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{5*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.y_name)} to {esc_text(A.x_name)}: {100.0*A.y_to_x:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{6*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.x_name)} to {esc_text(A.z_name)}: {100.0*A.x_to_z:.1f}%</text>'
-    out += f'<text x="{A.width - A.scale*12:g}" y="{7*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(A.x_name)} to {esc_text(A.y_name)}: {100.0*A.x_to_y:.1f}%</text>'
+    legend_lines = [
+        f"{A.z_name} to {A.y_name}: {100.0*A.z_to_y:.1f}%",
+        f"{A.z_name} to {A.x_name}: {100.0*A.z_to_x:.1f}%",
+        f"{A.y_name} to {A.z_name}: {100.0*A.y_to_z:.1f}%",
+        f"{A.y_name} to {A.x_name}: {100.0*A.y_to_x:.1f}%",
+        f"{A.x_name} to {A.z_name}: {100.0*A.x_to_z:.1f}%",
+        f"{A.x_name} to {A.y_name}: {100.0*A.x_to_y:.1f}%",
+    ]
+
+    # Estimate text width and size legend box to prevent overflow with long names.
+    # For the default sans-serif font, ~0.62 * font-size per character is a reasonable fit.
+    max_chars = max(len(line) for line in legend_lines)
+    est_text_width = max_chars * A.scale * 0.62
+    legend_padding = A.scale * 0.5
+    legend_width = est_text_width + 2 * legend_padding
+    legend_height = 6.5 * A.scale
+    legend_x = max(A.scale * 0.5, A.width - legend_width - legend_padding)
+    legend_text_x = legend_x + legend_padding
+
+    out += f'<rect width="{legend_width:g}" height="{legend_height:g}" x="{legend_x:g}" y="{A.scale:g}" class="bg"/>'
+    out += f'<text x="{legend_text_x:g}" y="{2*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[0])}</text>'
+    out += f'<text x="{legend_text_x:g}" y="{3*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[1])}</text>'
+    out += f'<text x="{legend_text_x:g}" y="{4*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[2])}</text>'
+    out += f'<text x="{legend_text_x:g}" y="{5*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[3])}</text>'
+    out += f'<text x="{legend_text_x:g}" y="{6*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[4])}</text>'
+    out += f'<text x="{legend_text_x:g}" y="{7*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[5])}</text>'
     out += '</g>'
 
     (x0, y0) = p2c(A.start, A.start,  A)
