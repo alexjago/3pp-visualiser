@@ -76,7 +76,7 @@ def make_args(query_dict):
 
 
 def application(env, start_response):
-    head = ["200 OK", [("Content-Type", "text/html")]]
+    head = ["200 OK", [("Content-Type", "image/svg+xml; charset=utf-8")]]
     body = b""
 
     # print(env)
@@ -107,12 +107,12 @@ def application(env, start_response):
         else:
             head[1].append(("Content-Disposition", "inline"))
         
-        # cache it for a day, but only in the browser
-        head[1].append(("Cache-Control", "private; max-age=86400"))
+        # One week cache for browser and shared caches (eg Cloudflare).
+        head[1].append(("Cache-Control", "public, max-age=604800, s-maxage=604800"))
 
     except ValueError as e:
-        head = ["400 Bad Request", ("Content-Type", "text/html")]
-        body = ("\r\n".join(head[0], str(e) + repr(query_dict))).encode("utf8")
+        head = ["400 Bad Request", [("Content-Type", "text/plain; charset=utf-8")]]
+        body = ("\r\n".join([head[0], str(e) + repr(query_dict)])).encode("utf8")
 
 
     start_response(head[0], head[1])
