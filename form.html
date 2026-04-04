@@ -43,7 +43,7 @@ fieldset input[type="radio"] + label {
   white-space: nowrap;
 }
 </style>
-<form method="get" target="_blank" action="https://3pp.abjago.net/wsgi" id="dlForm">
+<form method="get" action="https://3pp.abjago.net/wsgi" id="dlForm">
   <fieldset>
 	<legend>Matchup</legend>
 	<table id="matchup-table">
@@ -151,7 +151,7 @@ fieldset input[type="radio"] + label {
   </fieldset>
   <br />
   <div id="buttons" width="100%;">
-<button type="submit" class="btn btn-primary" style="justify-self: flex-start;">Reload
+<button type="button" class="btn btn-primary" style="justify-self: flex-start;" onclick="reloadGraph(); return false;">Reload
   Graph</button>
 <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
   Graph</button>
@@ -279,11 +279,10 @@ function buildSearchParams() {
   return search;
 }
 
-dlForm.addEventListener('submit', (event) => {
-  event.preventDefault();
+function reloadGraph() {
   let search = buildSearchParams();
   document.getElementById("fillMe").setAttribute("src", "https://3pp.abjago.net/wsgi?" + search.toString())
-});
+}
 
 function downloadGraph() {
   document.getElementById("dlinput").setAttribute("value", "true");
