@@ -42,6 +42,35 @@ fieldset input[type="radio"] + label {
   font-style: normal;
   white-space: nowrap;
 }
+
+#matchup-modes button {
+  margin-right: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 0.2em 0.6em;
+  border: 1px solid #bbb;
+  border-radius: 0.4em;
+  background: #f5f5f5;
+  cursor: pointer;
+}
+
+#matchup-modes button[aria-pressed="true"] {
+  border-color: #666;
+  background: #ddd;
+  font-weight: bold;
+}
+
+@media (max-width: 40em) {
+  #matchup-table input[type="text"] {
+	width: 22ch;
+	max-width: 45vw;
+  }
+
+  #matchup-modes {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+  }
+}
 </style>
 <form method="get" action="https://3pp.abjago.net/wsgi" id="dlForm">
   <fieldset>
@@ -57,6 +86,10 @@ fieldset input[type="radio"] + label {
 		  <td><input type="text" value="Greens" name="y_name" id="y_name"></td>
 		  <td><input type="color" value="#00aa22" name="y_colour" id="y_colour"></td>
 		  <td class="role-note">(Y axis)</td>
+		  <td id="matchup-modes" aria-label="Y-axis party presets">
+			<button type="button" data-y-name="Greens" data-y-colour="#00aa22" aria-pressed="true">Greens mode</button>
+			<button type="button" data-y-name="One Nation" data-y-colour="#ff8000" aria-pressed="false">One Nation mode</button>
+		  </td>
 		</tr>
 		<tr>
 		  <td><input type="text" value="Labor" name="z_name" id="z_name"></td>
@@ -184,6 +217,8 @@ var xtz = qs("#x_to_z");
 var xName = qs("#x_name");
 var yName = qs("#y_name");
 var zName = qs("#z_name");
+var yColour = qs("#y_colour");
+var matchupModeButtons = document.querySelectorAll("#matchup-modes button");
 var percentParams = new Set([
   "x_to_y", "x_to_z", "y_to_x", "y_to_z", "z_to_x", "z_to_y",
   "start", "stop", "step", "px", "py"
@@ -209,10 +244,30 @@ function syncPartyLabels() {
   qs("#poi_y_name").textContent = `${yLabel} vote (Y, %)`;
 }
 
+function syncMatchupModeButtons() {
+  matchupModeButtons.forEach((button) => {
+	let active = yName.value == button.dataset.yName && yColour.value.toLowerCase() == button.dataset.yColour;
+	button.setAttribute("aria-pressed", active.toString());
+  });
+}
+
+function setYPartyMode(button) {
+  yName.value = button.dataset.yName;
+  yColour.value = button.dataset.yColour;
+  syncPartyLabels();
+  syncMatchupModeButtons();
+}
+
 syncPartyLabels();
+syncMatchupModeButtons();
 xName.addEventListener("input", syncPartyLabels);
-yName.addEventListener("input", syncPartyLabels);
+yName.addEventListener("input", () => {
+  syncPartyLabels();
+  syncMatchupModeButtons();
+});
 zName.addEventListener("input", syncPartyLabels);
+yColour.addEventListener("input", syncMatchupModeButtons);
+matchupModeButtons.forEach((button) => button.addEventListener("click", () => setYPartyMode(button)));
 
 document.querySelectorAll('input[name="prefs"]').forEach((elem) => elem.addEventListener('change', (event) => {
   event.preventDefault();
