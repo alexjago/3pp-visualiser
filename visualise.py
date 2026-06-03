@@ -628,10 +628,29 @@ def get_args(args=None) -> argparse.Namespace:
                         help="Legacy alias for --x-to-z")
     parser.add_argument("--blue-to-green", default=0.3, type=float,
                         help="Legacy alias for --x-to-y")
+
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--cartesian", dest="chart_mode", action="store_const", const="cartesian",
+                      default="cartesian", help="Draw the current right-angle chart (default)")
+    mode.add_argument("--ternary", dest="chart_mode", action="store_const", const="ternary",
+                      help="Draw a ternary chart")
+
     parser.add_argument("--start", default=0.2, type=float,
-                        help="minimum X and Y axis value (default: %(default)g)")
+                        help="minimum axis value shorthand (default: %(default)g)")
     parser.add_argument("--stop", default=0.6, type=float,
-                        help="maximum X and Y axis value (default: %(default)g)")
+                        help="maximum axis value shorthand (default: %(default)g)")
+    parser.add_argument("--x-min", default=None, type=float,
+                        help="minimum X-party value; defaults to --start")
+    parser.add_argument("--x-max", default=None, type=float,
+                        help="maximum X-party value; defaults to --stop")
+    parser.add_argument("--y-min", default=None, type=float,
+                        help="minimum Y-party value; defaults to --start")
+    parser.add_argument("--y-max", default=None, type=float,
+                        help="maximum Y-party value; defaults to --stop")
+    parser.add_argument("--z-min", default=None, type=float,
+                        help="minimum Z-party value; in ternary mode defaults to --start")
+    parser.add_argument("--z-max", default=None, type=float,
+                        help="maximum Z-party value; in ternary mode defaults to --stop")
     parser.add_argument("--step", default=0.01, type=float,
                         help="precision of dots (default: %(default)g)")
     parser.add_argument('--scale', default=10, type=int,
@@ -691,6 +710,41 @@ def validate_args(A: argparse.Namespace) -> argparse.Namespace:
     # If (1 - A.stop) < A.start the graph gets wonky
     A.stop = min(abs(A.stop), 1 - A.start)
 
+    def normalise_bound(value, fallback):
+        if value is None:
+            value = fallback
+        return max(min(abs(value), 1.0), 0.0)
+
+    def normalise_bound_pair(lo, hi):
+        return (lo, max(lo, hi))
+
+    A.x_min, A.x_max = normalise_bound_pair(
+        normalise_bound(A.x_min, A.start),
+        normalise_bound(A.x_max, A.stop)
+    )
+    A.y_min, A.y_max = normalise_bound_pair(
+        normalise_bound(A.y_min, A.start),
+        normalise_bound(A.y_max, A.stop)
+    )
+
+    if A.chart_mode == "ternary":
+        z_min_default = A.start
+        z_max_default = A.stop
+    else:
+        z_min_default = 0.0
+        z_max_default = 1.0
+
+    A.z_min, A.z_max = normalise_bound_pair(
+        normalise_bound(A.z_min, z_min_default),
+        normalise_bound(A.z_max, z_max_default)
+    )
+
+    if A.chart_mode == "ternary":
+        if A.x_min + A.y_min + A.z_min > 1.0:
+            raise ValueError("minimum ternary bounds leave no valid points")
+        if A.x_max + A.y_max + A.z_max < 1.0:
+            raise ValueError("maximum ternary bounds leave no valid points")
+
     # Calculate sizes...
     A.inner_width = A.scale * 100.0 * (A.stop - A.start)
     A.width = (A.offset + 1) * A.scale + \
@@ -742,3 +796,4 @@ if __name__ == "__main__":
         print(construct_svg(A), file=A.output)
     except ValueError as e:
         print(e, file=sys.stderr)
+        sys.exit(1)
