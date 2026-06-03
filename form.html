@@ -59,6 +59,42 @@ fieldset input[type="radio"] + label {
   font-weight: bold;
 }
 
+#layout-options,
+#ternary-bounds {
+  margin-top: 0.6em;
+}
+
+#layout-options label,
+#ternary-bounds label {
+  margin-right: 0.4ch;
+}
+
+#ternary-bounds th,
+#ternary-bounds td {
+  padding-right: 1em;
+  text-align: left;
+}
+
+#ternary-bounds input[type="number"] {
+  width: 7ch;
+}
+
+#iwrap {
+  position: relative;
+  min-height: min(78vh, 48rem);
+  border-radius: 1em;
+  overflow: hidden;
+  background-color: #fff;
+}
+
+#fillMe {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  width: 100%;
+  height: 100%;
+}
+
 @media (max-width: 40em) {
   #matchup-table input[type="text"] {
 	width: 22ch;
@@ -69,6 +105,10 @@ fieldset input[type="radio"] + label {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
+  }
+
+  #iwrap {
+	min-height: 70vh;
   }
 }
 </style>
@@ -149,12 +189,48 @@ fieldset input[type="radio"] + label {
   <br />
   <fieldset>
 	<legend>Set graph layout options (%)</legend>
-	<label for="start">Minimum X & Y axis value:</label>
-	<input type="number" min="0" max="50" step="0.1" value="20" name="start" optional="">
-	<label for="stop">Maximum X & Y axis value:</label>
-	<input type="number" min="0" max="100" step="0.1" value="60" name="stop" optional="">
-	<label for="step">Size of dots:</label>
-	<input type="number" min="0" max="5" step="0.1" value="1" name="step" optional="">
+	<input type="radio" name="chart_mode" id="chart_mode_cartesian" value="cartesian" checked>
+	<label for="chart_mode_cartesian">Cartesian</label>
+	<input type="radio" name="chart_mode" id="chart_mode_ternary" value="ternary">
+	<label for="chart_mode_ternary">Ternary</label>
+	<div id="layout-options">
+	  <span id="shorthand-options">
+		<label for="start">Minimum X & Y axis value:</label>
+		<input type="number" min="0" max="50" step="0.1" value="20" name="start" id="start" optional="">
+		<label for="stop">Maximum X & Y axis value:</label>
+		<input type="number" min="0" max="100" step="0.1" value="60" name="stop" id="stop" optional="">
+	  </span>
+	  <span id="dot-size-option">
+		<label for="step">Size of dots:</label>
+		<input type="number" min="0" max="5" step="0.1" value="1" name="step" id="step" optional="">
+	  </span>
+	</div>
+	<table id="ternary-bounds" hidden>
+	  <thead>
+		<tr>
+		  <th>Party</th>
+		  <th>Minimum</th>
+		  <th>Maximum</th>
+		</tr>
+	  </thead>
+	  <tbody>
+		<tr>
+		  <th scope="row" id="x_bound_name">Coalition</th>
+		  <td><input type="number" min="0" max="100" step="0.1" name="x_min" id="x_min" placeholder="20" disabled></td>
+		  <td><input type="number" min="0" max="100" step="0.1" name="x_max" id="x_max" placeholder="60" disabled></td>
+		</tr>
+		<tr>
+		  <th scope="row" id="y_bound_name">Greens</th>
+		  <td><input type="number" min="0" max="100" step="0.1" name="y_min" id="y_min" placeholder="20" disabled></td>
+		  <td><input type="number" min="0" max="100" step="0.1" name="y_max" id="y_max" placeholder="60" disabled></td>
+		</tr>
+		<tr>
+		  <th scope="row" id="z_bound_name">Labor</th>
+		  <td><input type="number" min="0" max="100" step="0.1" name="z_min" id="z_min" placeholder="20" disabled></td>
+		  <td><input type="number" min="0" max="100" step="0.1" name="z_max" id="z_max" placeholder="60" disabled></td>
+		</tr>
+	  </tbody>
+	</table>
   </fieldset>
   <br />
   <fieldset>
@@ -195,10 +271,8 @@ fieldset input[type="radio"] + label {
 <br />
 
 
-<div id="iwrap" width="100%"
-  style="position:relative; padding-top:100%; border-radius:1em; overflow: hidden; background-color:#fff">
-  <iframe src="https://3pp.abjago.net/default.svg" style="position:absolute; top:0; left:0; border:0;" height="100%"
-	width="100%" id="fillMe"></iframe>
+<div id="iwrap" width="100%">
+  <iframe src="https://3pp.abjago.net/default.svg" id="fillMe"></iframe>
 </div>
 
 
@@ -219,9 +293,14 @@ var yName = qs("#y_name");
 var zName = qs("#z_name");
 var yColour = qs("#y_colour");
 var matchupModeButtons = document.querySelectorAll("#matchup-modes button");
+var chartModeInputs = document.querySelectorAll('input[name="chart_mode"]');
+var shorthandOptions = qs("#shorthand-options");
+var shorthandInputs = shorthandOptions.querySelectorAll('input[type="number"]');
+var ternaryBounds = qs("#ternary-bounds");
+var ternaryBoundInputs = ternaryBounds.querySelectorAll('input[type="number"]');
 var percentParams = new Set([
   "x_to_y", "x_to_z", "y_to_x", "y_to_z", "z_to_x", "z_to_y",
-  "start", "stop", "step", "px", "py"
+  "start", "stop", "step", "x_min", "x_max", "y_min", "y_max", "z_min", "z_max", "px", "py"
 ]);
 
 function partyLabel(value, fallback) {
@@ -242,6 +321,9 @@ function syncPartyLabels() {
   qs("#to_z_name").textContent = `to ${zLabel}`;
   qs("#poi_x_name").textContent = `${xLabel} vote (X, %)`;
   qs("#poi_y_name").textContent = `${yLabel} vote (Y, %)`;
+  qs("#x_bound_name").textContent = xLabel;
+  qs("#y_bound_name").textContent = yLabel;
+  qs("#z_bound_name").textContent = zLabel;
 }
 
 function syncMatchupModeButtons() {
@@ -258,8 +340,21 @@ function setYPartyMode(button) {
   syncMatchupModeButtons();
 }
 
+function syncChartModeOptions() {
+  let ternary = qs('input[name="chart_mode"]:checked').value == "ternary";
+  shorthandOptions.hidden = ternary;
+  shorthandInputs.forEach((input) => {
+	input.disabled = ternary;
+  });
+  ternaryBounds.hidden = !ternary;
+  ternaryBoundInputs.forEach((input) => {
+	input.disabled = !ternary;
+  });
+}
+
 syncPartyLabels();
 syncMatchupModeButtons();
+syncChartModeOptions();
 xName.addEventListener("input", syncPartyLabels);
 yName.addEventListener("input", () => {
   syncPartyLabels();
@@ -268,6 +363,7 @@ yName.addEventListener("input", () => {
 zName.addEventListener("input", syncPartyLabels);
 yColour.addEventListener("input", syncMatchupModeButtons);
 matchupModeButtons.forEach((button) => button.addEventListener("click", () => setYPartyMode(button)));
+chartModeInputs.forEach((input) => input.addEventListener("change", syncChartModeOptions));
 
 document.querySelectorAll('input[name="prefs"]').forEach((elem) => elem.addEventListener('change', (event) => {
   event.preventDefault();
