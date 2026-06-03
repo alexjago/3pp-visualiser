@@ -18,10 +18,15 @@ def make_args(query_dict):
 
     A = visualise.get_args("")
 
-    string_fields = {"x_name", "y_name", "z_name", "x_colour", "y_colour", "z_colour"}
+    string_fields = {"x_name", "y_name", "z_name",
+                     "x_colour", "y_colour", "z_colour"}
 
     for k, values in query_dict.items():
         if k not in vars(A) or not values:
+            continue
+        if k == "chart_mode":
+            if values[0] in {"cartesian", "ternary"}:
+                vars(A)[k] = values[0]
             continue
         if k in string_fields:
             vars(A)[k] = values[0]

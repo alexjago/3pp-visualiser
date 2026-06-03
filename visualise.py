@@ -85,6 +85,13 @@ def normalise_colour(value: str, fallback: str) -> str:
 
 def p2c(blue_pct: float, green_pct: float, A: argparse.Namespace) -> Tuple[float, float]:
     '''Percentages to Coordinates'''
+    if A.chart_mode == "ternary":
+        (raw_x, raw_y) = ternary_raw_point(blue_pct, green_pct, A)
+        return (
+            raw_x - A.ternary_raw_min_x + A.ternary_margin,
+            raw_y - A.ternary_raw_min_y + A.ternary_margin,
+        )
+
     # trying to account for being out-of-frame here was worse than not doing it
     # additional context is needed and hence now line() exists
 
@@ -94,6 +101,185 @@ def p2c(blue_pct: float, green_pct: float, A: argparse.Namespace) -> Tuple[float
                          (A.stop - A.start))) + A.scale
 
     return (x, y)
+
+
+def ternary_raw_point(blue_pct: float, green_pct: float, A: argparse.Namespace) -> Tuple[float, float]:
+    """Project ternary percentages to unnormalised equilateral-triangle coordinates."""
+    side = 100.0 * A.scale
+    return (
+        side * (blue_pct + 0.5 * green_pct),
+        side * (math.sqrt(3.0) / 2.0) * (1.0 - green_pct),
+    )
+
+
+def ternary_value(axis: str, blue_pct: float, green_pct: float) -> float:
+    """Return the party value for a ternary axis."""
+    if axis == "x":
+        return blue_pct
+    if axis == "y":
+        return green_pct
+    return 1.0 - blue_pct - green_pct
+
+
+def clip_polygon_half_plane(points, axis: str, bound: float, keep_greater: bool):
+    """Clip a percentage-space polygon to a single ternary half-plane."""
+    if not points:
+        return []
+
+    def inside(point):
+        value = ternary_value(axis, point[0], point[1])
+        if keep_greater:
+            return value >= bound - 1e-12
+        return value <= bound + 1e-12
+
+    def intersect(start, end):
+        start_value = ternary_value(axis, start[0], start[1])
+        end_value = ternary_value(axis, end[0], end[1])
+        denominator = end_value - start_value
+        if math.isclose(denominator, 0.0):
+            return end
+        t = (bound - start_value) / denominator
+        return (
+            start[0] + t * (end[0] - start[0]),
+            start[1] + t * (end[1] - start[1]),
+        )
+
+    clipped = []
+    previous = points[-1]
+    previous_inside = inside(previous)
+
+    for current in points:
+        current_inside = inside(current)
+        if current_inside:
+            if not previous_inside:
+                clipped.append(intersect(previous, current))
+            clipped.append(current)
+        elif previous_inside:
+            clipped.append(intersect(previous, current))
+
+        previous = current
+        previous_inside = current_inside
+
+    deduped = []
+    for point in clipped:
+        if not deduped or not (math.isclose(deduped[-1][0], point[0]) and math.isclose(deduped[-1][1], point[1])):
+            deduped.append(point)
+    if len(deduped) > 1 and math.isclose(deduped[0][0], deduped[-1][0]) and math.isclose(deduped[0][1], deduped[-1][1]):
+        deduped.pop()
+    return deduped
+
+
+def ternary_viewport_polygon(A: argparse.Namespace):
+    """Return the clipped ternary viewport polygon in percentage-space coordinates."""
+    polygon = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+    for axis, bound, keep_greater in [
+        ("x", A.x_min, True),
+        ("x", A.x_max, False),
+        ("y", A.y_min, True),
+        ("y", A.y_max, False),
+        ("z", A.z_min, True),
+        ("z", A.z_max, False),
+    ]:
+        polygon = clip_polygon_half_plane(polygon, axis, bound, keep_greater)
+    return polygon
+
+
+def clip_ternary_segment(x0: float, y0: float, x1: float, y1: float, A: argparse.Namespace):
+    """Clip a percentage-space line segment to the ternary viewport."""
+    t_min = 0.0
+    t_max = 1.0
+
+    def update(axis: str, bound: float, keep_greater: bool):
+        nonlocal t_min, t_max
+        start_value = ternary_value(axis, x0, y0)
+        end_value = ternary_value(axis, x1, y1)
+        delta = end_value - start_value
+
+        if math.isclose(delta, 0.0):
+            if keep_greater:
+                return start_value >= bound
+            return start_value <= bound
+
+        t = (bound - start_value) / delta
+        if keep_greater:
+            if delta > 0:
+                t_min = max(t_min, t)
+            else:
+                t_max = min(t_max, t)
+        else:
+            if delta > 0:
+                t_max = min(t_max, t)
+            else:
+                t_min = max(t_min, t)
+        return t_min <= t_max
+
+    for axis, bound, keep_greater in [
+        ("x", A.x_min, True),
+        ("x", A.x_max, False),
+        ("y", A.y_min, True),
+        ("y", A.y_max, False),
+        ("z", A.z_min, True),
+        ("z", A.z_max, False),
+    ]:
+        if not update(axis, bound, keep_greater):
+            return None
+
+    return (
+        x0 + t_min * (x1 - x0),
+        y0 + t_min * (y1 - y0),
+        x0 + t_max * (x1 - x0),
+        y0 + t_max * (y1 - y0),
+    )
+
+
+def point_in_polygon(point, polygon) -> bool:
+    """Return whether a screen-space point is inside a polygon."""
+    (x, y) = point
+    inside = False
+    previous = polygon[-1]
+
+    for current in polygon:
+        (x0, y0) = previous
+        (x1, y1) = current
+        if ((y0 > y) != (y1 > y)):
+            x_at_y = (x1 - x0) * (y - y0) / (y1 - y0) + x0
+            if x < x_at_y:
+                inside = not inside
+        previous = current
+
+    return inside
+
+
+def distance_to_segment(point, start, end) -> float:
+    """Return the screen-space distance from a point to a line segment."""
+    (px, py) = point
+    (x0, y0) = start
+    (x1, y1) = end
+    dx = x1 - x0
+    dy = y1 - y0
+    length_sq = dx * dx + dy * dy
+    if math.isclose(length_sq, 0.0):
+        return math.hypot(px - x0, py - y0)
+    t = max(0.0, min(1.0, ((px - x0) * dx + (py - y0) * dy) / length_sq))
+    return math.hypot(px - (x0 + t * dx), py - (y0 + t * dy))
+
+
+def circle_intersects_polygon(centre, radius: float, polygon) -> bool:
+    """Return whether a screen-space circle intersects a polygon."""
+    if point_in_polygon(centre, polygon):
+        return True
+
+    for vertex in polygon:
+        if math.hypot(centre[0] - vertex[0], centre[1] - vertex[1]) <= radius:
+            return True
+
+    previous = polygon[-1]
+    for current in polygon:
+        if distance_to_segment(centre, previous, current) <= radius:
+            return True
+        previous = current
+
+    return False
 
 
 def calculate_winner(red_pct: float, green_pct: float, blue_pct: float, A: argparse.Namespace) -> Tuple[Party, float]:
@@ -242,6 +428,15 @@ def clamp(val: float, A: argparse.Namespace) -> float:
 def line(x0: float, y0: float, x1: float, y1: float, A: argparse.Namespace) -> str:
     """Takes two points (percentage-space) and returns the appropriate path fragment, ensuring that they're all in-bounds."""
 
+    if A.chart_mode == "ternary":
+        clipped = clip_ternary_segment(x0, y0, x1, y1, A)
+        if not clipped:
+            return ""
+        (xa, ya, xb, yb) = clipped
+        (xp, yp) = p2c(xa, ya, A)
+        (xq, yq) = p2c(xb, yb, A)
+        return f"M {xp:g} {yp:g} {xq:g} {yq:g}"
+
     # we COULD have just used <clipPath> but this is even cleaner in the SVG
 
     # general principle: there'll be a gradient.
@@ -303,7 +498,9 @@ def draw_lines(A: argparse.Namespace) -> str:
     # g = r + (A.x_to_z * b) - (A.x_to_y * b)
     # g = (1 - (b + g)) + (A.x_to_z - A.x_to_y) * b
     # 2g = (1 - b) + (A.x_to_z - A.x_to_y) * b
-    x1 = A.start
+    edge_min = 0.0 if A.chart_mode == "ternary" else A.start
+
+    x1 = edge_min
     y1 = ((1 - x1) + (A.x_to_z - A.x_to_y) * x1)/2.0
 
     # Point #2 is the Green vs Red midpoint
@@ -347,7 +544,7 @@ def draw_lines(A: argparse.Namespace) -> str:
 
     # Point #5 is Red vs Blue on the X axis
     # The inverse of #1
-    y5 = A.start
+    y5 = edge_min
     x5 = ((1 - y5) + a4 * y5)/2.0
 
     # Lines #3 - #4 - #5 represents the Red/Blue boundary
@@ -399,11 +596,13 @@ def draw_lines(A: argparse.Namespace) -> str:
     # Lines #3 - #6 - #7 represents the Blue/Green boundary
     blue_green = f'{line(x3, y3, x6, y6, A)} {line(x6, y6, x7, y7, A)}'
 
-    # Unconditionally we also have a line down y = 1 - x
-    # (this passes through the hapoint too, but no direction change)
-    (xtop, ytop) = p2c(1.0 - A.stop, A.stop, A)
-    (xright, yright) = p2c(A.stop, 1.0 - A.stop, A)
-    top_right = f'M {xtop:g} {ytop:g} {xright:g} {yright:g}'
+    top_right = ""
+    if A.chart_mode == "cartesian":
+        # Unconditionally we also have a line down y = 1 - x
+        # (this passes through the hapoint too, but no direction change)
+        (xtop, ytop) = p2c(1.0 - A.stop, A.stop, A)
+        (xright, yright) = p2c(A.stop, 1.0 - A.stop, A)
+        top_right = f'M {xtop:g} {ytop:g} {xright:g} {yright:g}'
 
     # OK, time to draw all the lines!
     # print(f'R-G: ({x1:2.1%}, {y1:2.1%}), ({x2:2.1%}, {y2:2.1%}), ({x3:2.1%}, {y3:2.1%})',
@@ -456,19 +655,189 @@ def draw_pois(A: argparse.Namespace) -> str:
     return out
 
 
+def constant_party_segment(axis: str, value: float, A: argparse.Namespace):
+    """Return the visible segment for a constant-party ternary gridline."""
+    if axis == "x":
+        if value < A.x_min or value > A.x_max:
+            return None
+        lower = max(A.y_min, 1.0 - value - A.z_max)
+        upper = min(A.y_max, 1.0 - value - A.z_min)
+        if lower > upper:
+            return None
+        return (value, lower, value, upper)
+
+    if axis == "y":
+        if value < A.y_min or value > A.y_max:
+            return None
+        lower = max(A.x_min, 1.0 - value - A.z_max)
+        upper = min(A.x_max, 1.0 - value - A.z_min)
+        if lower > upper:
+            return None
+        return (lower, value, upper, value)
+
+    if value < A.z_min or value > A.z_max:
+        return None
+    lower = max(A.x_min, 1.0 - value - A.y_max)
+    upper = min(A.x_max, 1.0 - value - A.y_min)
+    if lower > upper:
+        return None
+    return (lower, 1.0 - value - lower, upper, 1.0 - value - upper)
+
+
+def draw_ternary_grid(A: argparse.Namespace) -> str:
+    """Draw ternary constant-party gridlines."""
+    out = ""
+    for axis, lo, hi in [
+        ("x", A.x_min, A.x_max),
+        ("y", A.y_min, A.y_max),
+        ("z", A.z_min, A.z_max),
+    ]:
+        for mark in A.marks:
+            if mark <= lo or mark >= hi:
+                continue
+            segment = constant_party_segment(axis, mark, A)
+            if not segment:
+                continue
+            (x0, y0, x1, y1) = segment
+            (xp, yp) = p2c(x0, y0, A)
+            (xq, yq) = p2c(x1, y1, A)
+            out += f'<path d="M {xp:g} {yp:g} {xq:g} {yq:g}" style="stroke:#ddd; stroke-width:{A.scale * 0.1:g}px; fill:none"/>\r\n'
+    return out
+
+
+def draw_ternary_grid_labels(A: argparse.Namespace) -> str:
+    """Draw labels for ternary constant-party gridlines."""
+    out = ""
+    polygon = [p2c(point[0], point[1], A) for point in A.ternary_polygon]
+    centre_x = sum(point[0] for point in polygon) / len(polygon)
+    centre_y = sum(point[1] for point in polygon) / len(polygon)
+
+    for axis, lo, hi in [
+        ("x", A.x_min, A.x_max),
+        ("y", A.y_min, A.y_max),
+        ("z", A.z_min, A.z_max),
+    ]:
+        (target_axis, target_value, _) = ternary_axis_side(axis, A)
+        for mark in A.marks:
+            if mark <= lo or mark >= hi:
+                continue
+            segment = constant_party_segment(axis, mark, A)
+            if not segment:
+                continue
+            percentage_endpoints = [
+                (segment[0], segment[1]),
+                (segment[2], segment[3]),
+            ]
+            label_point = min(
+                percentage_endpoints,
+                key=lambda point: abs(ternary_value(target_axis, point[0], point[1]) - target_value)
+            )
+            if not math.isclose(ternary_value(target_axis, label_point[0], label_point[1]), target_value, abs_tol=1e-9):
+                continue
+            (label_x, label_y) = p2c(label_point[0], label_point[1], A)
+            dx = label_x - centre_x
+            dy = label_y - centre_y
+            length = math.hypot(dx, dy) or 1.0
+            label_x += (dx / length) * A.scale * 2.2
+            label_y += (dy / length) * A.scale * 2.2
+            anchor = "middle"
+            if label_x < centre_x - A.scale:
+                anchor = "end"
+            elif label_x > centre_x + A.scale:
+                anchor = "start"
+            out += f'<text x="{label_x:g}" y="{label_y:g}" style="font-size:{A.scale:g}; text-anchor:{anchor}; dominant-baseline:middle">{mark:.0%}</text>\r\n'
+
+    return out
+
+
+def ternary_axis_side(axis: str, A: argparse.Namespace):
+    """Return the side used to label a ternary party axis."""
+    if axis == "x":
+        return ("y", A.y_min, A.x_name)
+    if axis == "y":
+        return ("z", A.z_min, A.y_name)
+    return ("x", A.x_min, A.z_name)
+
+
+def draw_ternary_side_labels(A: argparse.Namespace) -> str:
+    """Draw rotated party labels on the sides where their ticks appear."""
+    polygon = [p2c(point[0], point[1], A) for point in A.ternary_polygon]
+    centre_x = sum(point[0] for point in polygon) / len(polygon)
+    centre_y = sum(point[1] for point in polygon) / len(polygon)
+    out = ""
+
+    for axis in ["x", "y", "z"]:
+        (side_axis, side_value, party_label) = ternary_axis_side(axis, A)
+        segment = constant_party_segment(side_axis, side_value, A)
+        if not segment:
+            continue
+
+        endpoints = [
+            (segment[0], segment[1]),
+            (segment[2], segment[3]),
+        ]
+        endpoints.sort(key=lambda point: ternary_value(axis, point[0], point[1]))
+        (start_x, start_y) = p2c(endpoints[0][0], endpoints[0][1], A)
+        (end_x, end_y) = p2c(endpoints[1][0], endpoints[1][1], A)
+
+        label_x = (start_x + end_x) / 2.0
+        label_y = (start_y + end_y) / 2.0
+        dx = label_x - centre_x
+        dy = label_y - centre_y
+        length = math.hypot(dx, dy) or 1.0
+        label_x += (dx / length) * A.scale * 5.0
+        label_y += (dy / length) * A.scale * 5.0
+
+        angle = math.degrees(math.atan2(end_y - start_y, end_x - start_x))
+        text = f"{esc_text(party_label)} 3CP &#8594;"
+        if angle > 90.0 or angle < -90.0:
+            angle += 180.0
+            text = f"&#8592; {esc_text(party_label)} 3CP"
+        if angle > 180.0:
+            angle -= 360.0
+
+        out += f'<text transform="translate({label_x:g}, {label_y:g}) rotate({angle:g})" style="font-size:{A.scale:g}; text-anchor:middle; dominant-baseline:middle">{text}</text>\r\n'
+
+    return out
+
+
+def draw_ternary_frame(A: argparse.Namespace) -> str:
+    """Draw ternary viewport outline and party labels."""
+    polygon = [p2c(point[0], point[1], A) for point in A.ternary_polygon]
+    if not polygon:
+        return ""
+
+    path = " ".join(
+        f"{'M' if i == 0 else 'L'} {point[0]:g} {point[1]:g}"
+        for i, point in enumerate(polygon)
+    )
+    out = f'<path d="{path} Z" class="axis" style="fill:none"/>\r\n'
+
+    return out
+
+
 def construct_svg(A: argparse.Namespace) -> str:
     """Returns an SVG of the graph for given parameters as specified in `A`."""
     # let's output some SVG!
 
     out = ""
 
-    out += f'<svg viewBox="0 0 {A.width:.0f} {A.width:.0f}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
+    out += f'<svg viewBox="0 0 {A.width:.0f} {A.height:.0f}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
 
     # Set up <defs> section, including our triangle marker, the keyline effect and our CSS
 
     css = DEFAULT_CSS
     if A.css:
         css = (A.css).read()
+
+    clip_path = ""
+    if A.chart_mode == "ternary":
+        polygon = [p2c(point[0], point[1], A) for point in A.ternary_polygon]
+        path = " ".join(
+            f"{'M' if i == 0 else 'L'} {point[0]:g} {point[1]:g}"
+            for i, point in enumerate(polygon)
+        )
+        clip_path = f'<clipPath id="ternaryViewportClip"><path d="{path} Z"/></clipPath>'
 
     out += '<defs>' + \
         f'<marker id="triangle" viewBox="0 0 10 10" \
@@ -495,19 +864,46 @@ def construct_svg(A: argparse.Namespace) -> str:
             {css} \
         ]]> \
         </style>' + \
+        clip_path + \
         '</defs>'
 
     # place a bg rect
 
-    out += f'<rect width="{A.width:.0f}" height="{A.width:.0f}" class="bg" />'
+    out += f'<rect width="{A.width:.0f}" height="{A.height:.0f}" class="bg" />'
+
+    if A.chart_mode == "ternary":
+        out += '<g clip-path="url(#ternaryViewportClip)">'
+        out += draw_ternary_grid(A)
 
     # place our dots
 
-    for b in frange(A.start, (A.stop + A.step), A.step):
-        for g in frange(A.start, (A.stop + A.step), A.step):
-            if g + b > 1.0:
-                continue
-            out += construct_dot(b, g, A)
+    if A.chart_mode == "ternary":
+        dot_pad = A.step
+        x_start = max(0.0, A.x_min - dot_pad)
+        x_stop = min(1.0, A.x_max + dot_pad)
+        y_start = max(0.0, A.y_min - dot_pad)
+        y_stop = min(1.0, A.y_max + dot_pad)
+
+        for b in frange(x_start, (x_stop + A.step), A.step):
+            for g in frange(y_start, (y_stop + A.step), A.step):
+                r = 1.0 - (g + b)
+                if r < 0.0 or r > 1.0:
+                    continue
+                if r < A.z_min - dot_pad or r > A.z_max + dot_pad:
+                    continue
+                if not circle_intersects_polygon(
+                    p2c(b, g, A),
+                    A.radius,
+                    A.ternary_screen_polygon
+                ):
+                    continue
+                out += construct_dot(b, g, A)
+    else:
+        for b in frange(A.start, (A.stop + A.step), A.step):
+            for g in frange(A.start, (A.stop + A.step), A.step):
+                if g + b > 1.0:
+                    continue
+                out += construct_dot(b, g, A)
 
     # Draw change-of-winner lines
     out += draw_lines(A)
@@ -515,6 +911,9 @@ def construct_svg(A: argparse.Namespace) -> str:
     # place points of interest
     if A.input or A.point:
         out += draw_pois(A)
+
+    if A.chart_mode == "ternary":
+        out += '</g>'
 
     # Draw labels stating preference assumptions
     out += '<g id="preflabel">'
@@ -546,29 +945,34 @@ def construct_svg(A: argparse.Namespace) -> str:
     out += f'<text x="{legend_text_x:g}" y="{7*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[5])}</text>'
     out += '</g>'
 
-    (x0, y0) = p2c(A.start, A.start,  A)
-    (x0, y100) = p2c(A.start, A.stop,   A)
-    (x100, y0) = p2c(A.stop,  A.start,  A)
+    if A.chart_mode == "ternary":
+        out += draw_ternary_frame(A)
+        out += draw_ternary_grid_labels(A)
+        out += draw_ternary_side_labels(A)
+    else:
+        (x0, y0) = p2c(A.start, A.start,  A)
+        (x0, y100) = p2c(A.start, A.stop,   A)
+        (x100, y0) = p2c(A.stop,  A.start,  A)
 
-    # Draw Y axis
-    out += f'<path d="M {x0:g} {A.width:g} V {y100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
-    out += f'<text transform="translate({(x0 - (A.offset - 1)*A.scale):g}, {A.width/2 :g}) rotate(270)" style="text-anchor:middle">{esc_text(A.y_name)} 3CP</text>'
+        # Draw Y axis
+        out += f'<path d="M {x0:g} {A.height:g} V {y100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
+        out += f'<text transform="translate({(x0 - (A.offset - 1)*A.scale):g}, {A.height/2 :g}) rotate(270)" style="text-anchor:middle">{esc_text(A.y_name)} 3CP</text>'
 
-    for g in A.marks:
-        if g > A.start and g <= (A.stop):
-            (xpos, ypos) = p2c(A.start, g, A)
-            out += f'<path d="M {xpos:g} {ypos:g} h {-A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
-            out += f'<text y="{(ypos + A.scale/2):g}" x="{(xpos - 3*A.scale):g}" style="font-size:{A.scale:g}; text-anchor:right; text-align:middle">{g:.0%}</text>'
+        for g in A.marks:
+            if g > A.start and g <= (A.stop):
+                (xpos, ypos) = p2c(A.start, g, A)
+                out += f'<path d="M {xpos:g} {ypos:g} h {-A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
+                out += f'<text y="{(ypos + A.scale/2):g}" x="{(xpos - 3*A.scale):g}" style="font-size:{A.scale:g}; text-anchor:right; text-align:middle">{g:.0%}</text>'
 
-    # Draw X axis
-    out += f'<path d="M {0:g} {y0:g} H {x100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
-    out += f'<text x="{A.width/2:g}" y="{y0 + 3.5*A.scale:g}" style="text-anchor:middle">{esc_text(A.x_name)} 3CP</text>'
+        # Draw X axis
+        out += f'<path d="M {0:g} {y0:g} H {x100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
+        out += f'<text x="{A.width/2:g}" y="{y0 + 3.5*A.scale:g}" style="text-anchor:middle">{esc_text(A.x_name)} 3CP</text>'
 
-    for b in A.marks:
-        if b > A.start and b <= (A.stop):
-            (xpos, ypos) = p2c(b, A.start, A)
-            out += f'<path d="M {xpos:g} {ypos:g} v {A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
-            out += f'<text x="{xpos:g}" y="{ypos + 2*A.scale:g}" style="font-size:{A.scale}; text-anchor:middle">{b:.0%}</text>'
+        for b in A.marks:
+            if b > A.start and b <= (A.stop):
+                (xpos, ypos) = p2c(b, A.start, A)
+                out += f'<path d="M {xpos:g} {ypos:g} v {A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
+                out += f'<text x="{xpos:g}" y="{ypos + 2*A.scale:g}" style="font-size:{A.scale}; text-anchor:middle">{b:.0%}</text>'
 
     out += "\r\n<!-- Generated by https://abjago.net/3pp/ -->\r\n"
     out += "</svg>"
@@ -704,11 +1108,15 @@ def validate_args(A: argparse.Namespace) -> argparse.Namespace:
     # Clamp A.step to be in a reasonable range
     A.step = max(min(abs(A.step), 0.05), 0.002)
 
-    # clamp A.start to be a usable range
-    A.start = max(min(abs(A.start), 0.5 - 10*A.step), 0.0)
+    if A.chart_mode == "cartesian":
+        # clamp A.start to be a usable range
+        A.start = max(min(abs(A.start), 0.5 - 10*A.step), 0.0)
 
-    # If (1 - A.stop) < A.start the graph gets wonky
-    A.stop = min(abs(A.stop), 1 - A.start)
+        # If (1 - A.stop) < A.start the graph gets wonky
+        A.stop = min(abs(A.stop), 1 - A.start)
+    else:
+        A.start = max(min(abs(A.start), 1.0), 0.0)
+        A.stop = max(min(abs(A.stop), 1.0), 0.0)
 
     def normalise_bound(value, fallback):
         if value is None:
@@ -746,9 +1154,35 @@ def validate_args(A: argparse.Namespace) -> argparse.Namespace:
             raise ValueError("maximum ternary bounds leave no valid points")
 
     # Calculate sizes...
-    A.inner_width = A.scale * 100.0 * (A.stop - A.start)
-    A.width = (A.offset + 1) * A.scale + \
-        A.inner_width  # extra on right and top
+    if A.chart_mode == "ternary":
+        A.ternary_polygon = ternary_viewport_polygon(A)
+
+        area = 0.0
+        for i, point in enumerate(A.ternary_polygon):
+            next_point = A.ternary_polygon[(i + 1) % len(A.ternary_polygon)]
+            area += point[0] * next_point[1] - next_point[0] * point[1]
+        if len(A.ternary_polygon) < 3 or math.isclose(area, 0.0, abs_tol=1e-12):
+            raise ValueError("ternary bounds collapse to no drawable area")
+
+        raw_points = [ternary_raw_point(point[0], point[1], A)
+                      for point in A.ternary_polygon]
+        A.ternary_raw_min_x = min(point[0] for point in raw_points)
+        A.ternary_raw_max_x = max(point[0] for point in raw_points)
+        A.ternary_raw_min_y = min(point[1] for point in raw_points)
+        A.ternary_raw_max_y = max(point[1] for point in raw_points)
+        A.ternary_margin = max(A.offset * A.scale, A.scale * 12.0)
+        A.inner_width = A.ternary_raw_max_x - A.ternary_raw_min_x
+        A.width = A.inner_width + 2 * A.ternary_margin
+        A.height = (A.ternary_raw_max_y - A.ternary_raw_min_y) + 2 * A.ternary_margin
+        A.ternary_screen_polygon = [
+            p2c(point[0], point[1], A) for point in A.ternary_polygon
+        ]
+    else:
+        A.inner_width = A.scale * 100.0 * (A.stop - A.start)
+        A.width = (A.offset + 1) * A.scale + \
+            A.inner_width  # extra on right and top
+        A.height = A.width
+
     # A.scale is pixels per percent, A.step is percent per dot
     A.radius = 50.0 * A.scale * A.step
 
