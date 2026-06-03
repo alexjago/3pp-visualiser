@@ -112,7 +112,7 @@ fieldset input[type="radio"] + label {
   }
 }
 </style>
-<form method="get" action="https://3pp.abjago.net/wsgi" id="dlForm">
+<form method="get" action="https://3pp.abjago.net/wsgi" id="dlForm" markdown="0">
   <fieldset>
 	<legend>Matchup</legend>
 	<table id="matchup-table">
@@ -255,6 +255,7 @@ fieldset input[type="radio"] + label {
 			<input type="text" name="pl" optional="" placeholder="Ryan 2022">
 		  </td>
 		  <td><button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">-</button></td>
+		</tr>
 	  </tbody>
 	</table>
   </fieldset>
@@ -265,7 +266,6 @@ fieldset input[type="radio"] + label {
 <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
   Graph</button>
   </div>
-  </fieldset>
   <input type="hidden" name="dl" id="dlinput">
 </form>
 <br />
