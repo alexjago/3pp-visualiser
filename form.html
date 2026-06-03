@@ -46,17 +46,14 @@ fieldset input[type="radio"] + label {
 #matchup-modes button {
   margin-right: 0.4em;
   margin-bottom: 0.2em;
-  padding: 0.2em 0.6em;
-  border: 1px solid #bbb;
-  border-radius: 0.4em;
-  background: #f5f5f5;
-  cursor: pointer;
 }
 
 #matchup-modes button[aria-pressed="true"] {
-  border-color: #666;
-  background: #ddd;
   font-weight: bold;
+}
+
+#matchup-modes button[aria-pressed="false"] {
+  font-weight: normal;
 }
 
 #layout-options,
@@ -193,18 +190,18 @@ fieldset input[type="radio"] + label {
 	<label for="chart_mode_cartesian">Cartesian</label>
 	<input type="radio" name="chart_mode" id="chart_mode_ternary" value="ternary">
 	<label for="chart_mode_ternary">Ternary</label>
-	<div id="layout-options">
-	  <span id="shorthand-options">
-		<label for="start">Minimum X & Y axis value:</label>
-		<input type="number" min="0" max="50" step="0.1" value="20" name="start" id="start" optional="">
-		<label for="stop">Maximum X & Y axis value:</label>
-		<input type="number" min="0" max="100" step="0.1" value="60" name="stop" id="stop" optional="">
-	  </span>
-	  <span id="dot-size-option">
-		<label for="step">Size of dots:</label>
-		<input type="number" min="0" max="5" step="0.1" value="1" name="step" id="step" optional="">
-	  </span>
-	</div>
+<div id="layout-options">
+<div id="shorthand-options">
+<label for="start">Minimum X & Y axis value:</label>
+<input type="number" min="0" max="50" step="0.1" value="20" name="start" id="start" optional="">
+<label for="stop">Maximum X & Y axis value:</label>
+<input type="number" min="0" max="100" step="0.1" value="60" name="stop" id="stop" optional="">
+</div>
+<div id="dot-size-option">
+<label for="step">Size of dots:</label>
+<input type="number" min="0" max="5" step="0.1" value="1" name="step" id="step" optional="">
+</div>
+</div>
 	<table id="ternary-bounds" hidden>
 	  <thead>
 		<tr>
@@ -298,6 +295,24 @@ var shorthandOptions = qs("#shorthand-options");
 var shorthandInputs = shorthandOptions.querySelectorAll('input[type="number"]');
 var ternaryBounds = qs("#ternary-bounds");
 var ternaryBoundInputs = ternaryBounds.querySelectorAll('input[type="number"]');
+var matchupModePreferences = {
+  "Greens": {
+	y_to_z: 80,
+	y_to_x: 20,
+	z_to_y: 80,
+	z_to_x: 20,
+	x_to_z: 70,
+	x_to_y: 30
+  },
+  "One Nation": {
+	y_to_x: 65,
+	y_to_z: 35,
+	x_to_y: 60,
+	x_to_z: 40,
+	z_to_x: 80,
+	z_to_y: 20
+  }
+};
 var percentParams = new Set([
   "x_to_y", "x_to_z", "y_to_x", "y_to_z", "z_to_x", "z_to_y",
   "start", "stop", "step", "x_min", "x_max", "y_min", "y_max", "z_min", "z_max", "px", "py"
@@ -333,9 +348,23 @@ function syncMatchupModeButtons() {
   });
 }
 
+function isCoalitionLaborMatchup() {
+  return xName.value.trim().toLowerCase() == "coalition" &&
+	zName.value.trim().toLowerCase() == "labor";
+}
+
+function applyMatchupModePreferences(mode) {
+  if (!isCoalitionLaborMatchup()) return;
+
+  Object.entries(matchupModePreferences[mode]).forEach(([id, value]) => {
+	qs(`#${id}`).value = value;
+  });
+}
+
 function setYPartyMode(button) {
   yName.value = button.dataset.yName;
   yColour.value = button.dataset.yColour;
+  applyMatchupModePreferences(button.dataset.yName);
   syncPartyLabels();
   syncMatchupModeButtons();
 }
