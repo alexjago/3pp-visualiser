@@ -18,12 +18,9 @@ from xml.sax.saxutils import escape
 DEFAULT_CSS = """
 text {font-family: sans-serif; font-size: 10px; fill: #222;}
 text.label {filter: url(#keylineEffect); font-weight: bold}
-/* dot, red, green, blue, tie*/
+/* dot, party, tie*/
 .d {opacity:0.6;}
 .d:hover {opacity:1;}
-.r {fill: #d04}
-.g {fill: #0a2}
-.b {fill: #08e}
 .t {fill: #888}
 /* point of interest */
 .poi {stroke:#000; fill-opacity:0.4; stroke-width: 0.3%}
@@ -38,9 +35,9 @@ path.axis {stroke: #222; stroke-width: 2px;}
 
 
 class Party(Enum):
-    RED = ("Labor", "r")
-    GREEN = ("Greens", "g")
-    BLUE = ("Coalition", "b")
+    RED = ("Labor", "z")
+    GREEN = ("Greens", "y")
+    BLUE = ("Coalition", "x")
 
 # NOTE: throughout this file we'll use a variable called `A` to store our general state
 # This replaces the original and pervasive use of globals.
@@ -65,13 +62,22 @@ def party_name(party: Party, A: argparse.Namespace) -> str:
     return esc_text(A.z_name)
 
 
-def party_colour(party: Party, A: argparse.Namespace) -> str:
-    """Return configured colour for a party enum value."""
+def party_class(party: Party) -> str:
+    """Return the canonical CSS class for a party enum value."""
     if party == Party.BLUE:
-        return A.x_colour
+        return "x"
     if party == Party.GREEN:
-        return A.y_colour
-    return A.z_colour
+        return "y"
+    return "z"
+
+
+def party_fill_css(A: argparse.Namespace) -> str:
+    """Return CSS classes for configured party colours."""
+    return "\n".join([
+        f".x {{fill: {A.x_colour}}}",
+        f".y {{fill: {A.y_colour}}}",
+        f".z {{fill: {A.z_colour}}}",
+    ]) + "\n"
 
 
 def normalise_colour(value: str, fallback: str) -> str:
@@ -387,8 +393,7 @@ def construct_dot(blue_pct: float, green_pct: float, A: argparse.Namespace) -> s
     try:
         (winner, margin) = calculate_winner(red_pct, green_pct, blue_pct, A)
         tooltip = f"{tooltip_3cp} Winner: {party_name(winner, A)} {margin:.1%}"
-        fill = party_colour(winner, A)
-        return f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="d" style="fill:{fill}"><title>{tooltip}</title></circle>'.replace(".0%", "%")
+        return f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="{party_class(winner)} d"><title>{tooltip}</title></circle>'.replace(".0%", "%")
 
     except TypeError:  # raised on a tie
         tooltip = f"{tooltip_3cp} Winner: TIE"
@@ -829,6 +834,7 @@ def construct_svg(A: argparse.Namespace) -> str:
     css = DEFAULT_CSS
     if A.css:
         css = (A.css).read()
+    css += "\n" + party_fill_css(A)
 
     clip_path = ""
     if A.chart_mode == "ternary":
