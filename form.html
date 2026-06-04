@@ -93,6 +93,11 @@ fieldset input[type="radio"] + label {
   color: #555;
 }
 
+#form-status {
+  margin-top: 0.5em;
+  color: #8a3b00;
+}
+
 #iwrap {
   position: relative;
   min-height: min(78vh, 48rem);
@@ -293,6 +298,7 @@ fieldset input[type="radio"] + label {
 <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
   Graph</button>
   </div>
+  <div id="form-status" aria-live="polite"></div>
   <input type="hidden" name="dl" id="dlinput">
 </form>
 <br />
@@ -327,6 +333,7 @@ var ternaryBounds = qs("#ternary-bounds");
 var ternaryBoundInputs = ternaryBounds.querySelectorAll('input');
 var poiImportFile = qs("#poi-import-file");
 var poiStatus = qs("#poi-status");
+var formStatus = qs("#form-status");
 var matchupModePreferences = {
   "Greens": {
 	y_to_z: 80,
@@ -492,12 +499,119 @@ function buildSearchParams() {
   return search;
 }
 
+function numberFromInput(input) {
+  let value = input.value.trim();
+  if (value == "") return null;
+  let n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function validatePreferenceRows() {
+  let messages = [];
+  let rows = [
+	{x: xty, z: xtz, label: `${partyLabel(xName.value, "X")} preference row`},
+	{x: ytx, z: ytz, label: `${partyLabel(yName.value, "Y")} preference row`},
+	{x: ztx, z: zty, label: `${partyLabel(zName.value, "Z")} preference row`}
+  ];
+
+  rows.forEach((row) => {
+	let first = numberFromInput(row.x);
+	let second = numberFromInput(row.z);
+	if (first === null || second === null) {
+	  messages.push(`${row.label} has a blank or invalid percentage.`);
+	  return;
+	}
+	if (first < 0 || first > 100 || second < 0 || second > 100) {
+	  messages.push(`${row.label} has a percentage outside 0..100%.`);
+	  return;
+	}
+	if (first + second > 100) {
+	  messages.push(`${row.label} sums to ${(first + second).toFixed(1)}%, so the backend would normalise it.`);
+	}
+  });
+
+  return messages;
+}
+
+function validateTernaryBounds() {
+  if (qs('input[name="chart_mode"]:checked').value != "ternary") return [];
+
+  let mins = ["x_min", "y_min", "z_min"].map((id) => numberFromInput(qs(`#${id}`)));
+  if (mins.some((value) => value === null)) {
+	return ["Ternary minimum bounds must all be valid percentages."];
+  }
+  if (mins.some((value) => value < 0 || value > 100)) {
+	return ["Ternary minimum bounds must be between 0% and 100%."];
+  }
+  let total = mins.reduce((sum, value) => sum + value, 0);
+  if (total > 100) {
+	return [`Ternary minimum bounds sum to ${total.toFixed(1)}%, leaving no drawable triangle.`];
+  }
+  return [];
+}
+
+function validatePOITable() {
+  let messages = [];
+  let blankRows = 0;
+
+  Array.from(qs("#poitable tbody").rows).forEach((row, index) => {
+	let px = row.querySelector('input[name="px"]').value.trim();
+	let py = row.querySelector('input[name="py"]').value.trim();
+	let pl = row.querySelector('input[name="pl"]').value.trim();
+
+	if (px == "" && py == "" && pl == "") {
+	  blankRows++;
+	  return;
+	}
+
+	let x = Number(px);
+	let y = Number(py);
+	if (px == "" || py == "" || !Number.isFinite(x) || !Number.isFinite(y)) {
+	  messages.push(`POI row ${index + 1} needs valid X and Y percentages.`);
+	  return;
+	}
+	if (x < 0 || x > 100 || y < 0 || y > 100) {
+	  messages.push(`POI row ${index + 1} has a percentage outside 0..100%.`);
+	  return;
+	}
+	if (x + y > 100) {
+	  messages.push(`POI row ${index + 1} has X + Y = ${(x + y).toFixed(1)}%, which leaves no valid Z share.`);
+	}
+  });
+
+  return {messages, blankRows};
+}
+
+function validateBeforeGraphAction() {
+  let messages = [
+	...validateTernaryBounds(),
+	...validatePreferenceRows()
+  ];
+  let poiValidation = validatePOITable();
+  messages.push(...poiValidation.messages);
+
+  formStatus.textContent = messages.join(" ");
+  if (poiValidation.messages.length) {
+	showPOIStatus(poiValidation.messages.join(" "));
+  } else if (poiValidation.blankRows) {
+	showPOIStatus(`${poiValidation.blankRows} blank POI row${poiValidation.blankRows == 1 ? "" : "s"} will be ignored.`);
+  } else if (poiStatus.textContent.startsWith("Imported") || poiStatus.textContent.startsWith("Exported")) {
+	// Keep useful import/export feedback visible.
+  } else {
+	showPOIStatus("");
+  }
+
+  return messages.length == 0;
+}
+
 function reloadGraph() {
+  if (!validateBeforeGraphAction()) return false;
   let search = buildSearchParams();
   document.getElementById("fillMe").setAttribute("src", "https://3pp.abjago.net/wsgi?" + search.toString())
 }
 
 function downloadGraph() {
+  if (!validateBeforeGraphAction()) return false;
   document.getElementById("dlinput").setAttribute("value", "true");
   let search = buildSearchParams();
   window.open("https://3pp.abjago.net/wsgi?" + search.toString())
