@@ -4,6 +4,10 @@ import os.path
 # local copy
 import visualise
 
+STRING_FIELDS = {"x_name", "y_name", "z_name",
+                 "x_colour", "y_colour", "z_colour"}
+
+
 def esc(str):
     """XML escape, but forward slashes are also converted to entity references
     and whitespace control characters are converted to spaces"""
@@ -13,28 +17,77 @@ def esc(str):
         str, {"\n": " ", "\t": " ", "\b": " ", "\r": " ", "\f": " ", "/": "&#47;"}
     )
 
+
+def first_query_value(query_dict, key):
+    """Return the first query value for a key, or None when absent."""
+    values = query_dict.get(key)
+    if not values:
+        return None
+    return values[0]
+
+
+def first_query_float(query_dict, key):
+    """Return the first query value parsed as float, or None when invalid."""
+    value = first_query_value(query_dict, key)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def apply_query_values(A, query_dict):
+    """Apply direct query-string fields to a visualise argument namespace."""
+    for key, values in query_dict.items():
+        if key not in vars(A) or not values:
+            continue
+        if key == "chart_mode":
+            if values[0] in {"cartesian", "ternary"}:
+                vars(A)[key] = values[0]
+            continue
+        if key in STRING_FIELDS:
+            vars(A)[key] = values[0]
+            continue
+        value = first_query_float(query_dict, key)
+        if value is not None:
+            vars(A)[key] = value
+
+
+def apply_flow_alias_query_values(A, query_dict):
+    """Apply canonical flow query params, falling back to legacy aliases."""
+    for canonical, legacy in visualise.FLOW_ALIASES.items():
+        if first_query_value(query_dict, canonical) is not None:
+            value = first_query_float(query_dict, canonical)
+        else:
+            value = first_query_float(query_dict, legacy)
+        if value is not None:
+            vars(A)[canonical] = value
+
+
+def query_points(query_dict):
+    """Return sanitised point-of-interest rows from repeated query params."""
+    if 'px' not in query_dict or 'py' not in query_dict or 'pl' not in query_dict:
+        return None
+
+    points = []
+    for i in range(len(query_dict['px'])):
+        try:
+            px = float(query_dict['px'][i])
+            py = float(query_dict['py'][i])
+            pl = esc(query_dict['pl'][i])
+            points.append([px, py, pl])
+        except:
+            continue
+    return points
+
+
 def make_args(query_dict):
     """Update the argparse namespace from the query dict."""
 
     A = visualise.get_args("")
 
-    string_fields = {"x_name", "y_name", "z_name",
-                     "x_colour", "y_colour", "z_colour"}
-
-    for k, values in query_dict.items():
-        if k not in vars(A) or not values:
-            continue
-        if k == "chart_mode":
-            if values[0] in {"cartesian", "ternary"}:
-                vars(A)[k] = values[0]
-            continue
-        if k in string_fields:
-            vars(A)[k] = values[0]
-            continue
-        try:
-            vars(A)[k] = float(values[0])
-        except (TypeError, ValueError):
-            continue
+    apply_query_values(A, query_dict)
 
     # Not these though. #blocked
     A.css = None
@@ -45,38 +98,39 @@ def make_args(query_dict):
     A.step = max(0.005, A.step)
 
     # Canonical flow params always override legacy aliases when both exist
-    flow_aliases = {
-        "x_to_y": "blue_to_green",
-        "x_to_z": "blue_to_red",
-        "y_to_x": "green_to_blue",
-        "y_to_z": "green_to_red",
-        "z_to_x": "red_to_blue",
-        "z_to_y": "red_to_green",
-    }
-    for canonical, legacy in flow_aliases.items():
-        if canonical in query_dict and query_dict[canonical]:
-            try:
-                vars(A)[canonical] = float(query_dict[canonical][0])
-            except (TypeError, ValueError):
-                pass
-        elif legacy in query_dict and query_dict[legacy]:
-            try:
-                vars(A)[canonical] = float(query_dict[legacy][0])
-            except (TypeError, ValueError):
-                pass
+    apply_flow_alias_query_values(A, query_dict)
 
-    if 'px' in query_dict and 'py' in query_dict and 'pl' in query_dict:
-        A.point = []
-        for i in range(len(query_dict['px'])):
-            try:
-                px = float(query_dict['px'][i])
-                py = float(query_dict['py'][i])
-                pl = esc(query_dict['pl'][i])
-                A.point.append([px, py, pl])
-            except:
-                continue
+    points = query_points(query_dict)
+    if points is not None:
+        A.point = points
 
     return visualise.validate_args(A)
+
+
+def filename_flow_parts(A):
+    """Return canonical flow parts for SVG download filenames."""
+    return [
+        f"{field}{getattr(A, field):g}"
+        for field in visualise.FLOW_FIELDS
+    ]
+
+
+def filename_bound_parts(A):
+    """Return mode-specific bound parts for SVG download filenames."""
+    if A.chart_mode == "ternary":
+        return [
+            f"x_min{A.x_min:g}",
+            f"x_max{A.x_max:g}",
+            f"y_min{A.y_min:g}",
+            f"y_max{A.y_max:g}",
+            f"z_min{A.z_min:g}",
+            f"z_max{A.z_max:g}",
+        ]
+
+    return [
+        f"start{A.start:g}",
+        f"stop{A.stop:g}",
+    ]
 
 
 def download_filename(A):
@@ -84,29 +138,9 @@ def download_filename(A):
     parts = [
         "3pp_vis",
         A.chart_mode,
-        f"x_to_y{A.x_to_y:g}",
-        f"x_to_z{A.x_to_z:g}",
-        f"y_to_x{A.y_to_x:g}",
-        f"y_to_z{A.y_to_z:g}",
-        f"z_to_x{A.z_to_x:g}",
-        f"z_to_y{A.z_to_y:g}",
     ]
-
-    if A.chart_mode == "ternary":
-        parts.extend([
-            f"x_min{A.x_min:g}",
-            f"x_max{A.x_max:g}",
-            f"y_min{A.y_min:g}",
-            f"y_max{A.y_max:g}",
-            f"z_min{A.z_min:g}",
-            f"z_max{A.z_max:g}",
-        ])
-    else:
-        parts.extend([
-            f"start{A.start:g}",
-            f"stop{A.stop:g}",
-        ])
-
+    parts.extend(filename_flow_parts(A))
+    parts.extend(filename_bound_parts(A))
     parts.append(f"step{A.step:g}")
     return "_".join(parts) + ".svg"
 

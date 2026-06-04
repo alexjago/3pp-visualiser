@@ -45,6 +45,17 @@ class Party(Enum):
 
 VALID_COLOUR = re.compile(r'^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$')
 
+FLOW_ALIASES = {
+    "x_to_y": "blue_to_green",
+    "x_to_z": "blue_to_red",
+    "y_to_x": "green_to_blue",
+    "y_to_z": "green_to_red",
+    "z_to_x": "red_to_blue",
+    "z_to_y": "red_to_green",
+}
+
+FLOW_FIELDS = tuple(FLOW_ALIASES.keys())
+
 
 def esc_text(text: str) -> str:
     """XML escape text and normalise control whitespace."""
@@ -87,6 +98,134 @@ def normalise_colour(value: str, fallback: str) -> str:
         if VALID_COLOUR.fullmatch(candidate):
             return candidate.lower()
     return fallback
+
+
+def sync_legacy_flow_aliases(A: argparse.Namespace) -> None:
+    """Keep legacy blue/green/red flow fields aligned with x/y/z fields."""
+    for canonical, legacy in FLOW_ALIASES.items():
+        setattr(A, legacy, getattr(A, canonical))
+
+
+def apply_flow_defaults(A: argparse.Namespace) -> None:
+    """Resolve canonical flow fields from legacy defaults where needed."""
+    for canonical, legacy in FLOW_ALIASES.items():
+        if getattr(A, canonical) is None:
+            setattr(A, canonical, getattr(A, legacy))
+    sync_legacy_flow_aliases(A)
+
+
+def normalise_labels_and_colours(A: argparse.Namespace) -> None:
+    """Normalise public party labels and colour fields."""
+    A.x_name = (str(A.x_name).strip() or "Coalition")
+    A.y_name = (str(A.y_name).strip() or "Greens")
+    A.z_name = (str(A.z_name).strip() or "Labor")
+    A.x_colour = normalise_colour(A.x_colour, "#08e")
+    A.y_colour = normalise_colour(A.y_colour, "#0a2")
+    A.z_colour = normalise_colour(A.z_colour, "#d04")
+
+
+def normalise_bound(value, fallback) -> float:
+    """Normalise a single graph bound to a 0..1 ratio."""
+    if value is None:
+        value = fallback
+    return max(min(abs(value), 1.0), 0.0)
+
+
+def normalise_bound_pair(lo: float, hi: float) -> Tuple[float, float]:
+    """Normalise a lower/upper bound pair without allowing inversion."""
+    return (lo, max(lo, hi))
+
+
+def normalise_chart_bounds(A: argparse.Namespace) -> None:
+    """Normalise chart mode bounds and reject impossible ternary bounds."""
+    if A.chart_mode == "cartesian":
+        # clamp A.start to be a usable range
+        A.start = max(min(abs(A.start), 0.5 - 10*A.step), 0.0)
+
+        # If (1 - A.stop) < A.start the graph gets wonky
+        A.stop = min(abs(A.stop), 1 - A.start)
+    else:
+        A.start = max(min(abs(A.start), 1.0), 0.0)
+        A.stop = max(min(abs(A.stop), 1.0), 0.0)
+
+    A.x_min, A.x_max = normalise_bound_pair(
+        normalise_bound(A.x_min, A.start),
+        normalise_bound(A.x_max, A.stop)
+    )
+    A.y_min, A.y_max = normalise_bound_pair(
+        normalise_bound(A.y_min, A.start),
+        normalise_bound(A.y_max, A.stop)
+    )
+
+    if A.chart_mode == "ternary":
+        z_min_default = A.start
+        z_max_default = A.stop
+    else:
+        z_min_default = 0.0
+        z_max_default = 1.0
+
+    A.z_min, A.z_max = normalise_bound_pair(
+        normalise_bound(A.z_min, z_min_default),
+        normalise_bound(A.z_max, z_max_default)
+    )
+
+    if A.chart_mode == "ternary":
+        if A.x_min + A.y_min + A.z_min > 1.0:
+            raise ValueError("minimum ternary bounds leave no valid points")
+        if A.x_max + A.y_max + A.z_max < 1.0:
+            raise ValueError("maximum ternary bounds leave no valid points")
+
+
+def configure_canvas(A: argparse.Namespace) -> None:
+    """Calculate derived SVG dimensions and ternary viewport geometry."""
+    if A.chart_mode == "ternary":
+        A.ternary_polygon = ternary_viewport_polygon(A)
+
+        area = 0.0
+        for i, point in enumerate(A.ternary_polygon):
+            next_point = A.ternary_polygon[(i + 1) % len(A.ternary_polygon)]
+            area += point[0] * next_point[1] - next_point[0] * point[1]
+        if len(A.ternary_polygon) < 3 or math.isclose(area, 0.0, abs_tol=1e-12):
+            raise ValueError("ternary bounds collapse to no drawable area")
+
+        raw_points = [ternary_raw_point(point[0], point[1], A)
+                      for point in A.ternary_polygon]
+        A.ternary_raw_min_x = min(point[0] for point in raw_points)
+        A.ternary_raw_max_x = max(point[0] for point in raw_points)
+        A.ternary_raw_min_y = min(point[1] for point in raw_points)
+        A.ternary_raw_max_y = max(point[1] for point in raw_points)
+        A.ternary_margin = max(A.offset * A.scale, A.scale * 12.0)
+        A.inner_width = A.ternary_raw_max_x - A.ternary_raw_min_x
+        A.width = A.inner_width + 2 * A.ternary_margin
+        A.height = (A.ternary_raw_max_y - A.ternary_raw_min_y) + 2 * A.ternary_margin
+        A.ternary_screen_polygon = [
+            p2c(point[0], point[1], A) for point in A.ternary_polygon
+        ]
+    else:
+        A.inner_width = A.scale * 100.0 * (A.stop - A.start)
+        A.width = (A.offset + 1) * A.scale + A.inner_width
+        A.height = A.width
+
+    # A.scale is pixels per percent, A.step is percent per dot
+    A.radius = 50.0 * A.scale * A.step
+
+
+def normalise_preference_flows(A: argparse.Namespace) -> None:
+    """Clamp flow fields to 0..1 and normalise over-full preference rows."""
+    for field in FLOW_FIELDS:
+        setattr(A, field, max(min(abs(getattr(A, field)), 1.0), 0.0))
+
+    for first, second in [
+        ("z_to_y", "z_to_x"),
+        ("y_to_z", "y_to_x"),
+        ("x_to_y", "x_to_z"),
+    ]:
+        total = getattr(A, first) + getattr(A, second)
+        if total > 1.0:
+            setattr(A, first, getattr(A, first) / total)
+            setattr(A, second, getattr(A, second) / total)
+
+    sync_legacy_flow_aliases(A)
 
 
 def p2c(blue_pct: float, green_pct: float, A: argparse.Namespace) -> Tuple[float, float]:
@@ -821,31 +960,26 @@ def draw_ternary_frame(A: argparse.Namespace) -> str:
     return out
 
 
-def construct_svg(A: argparse.Namespace) -> str:
-    """Returns an SVG of the graph for given parameters as specified in `A`."""
-    # let's output some SVG!
+def ternary_clip_path(A: argparse.Namespace) -> str:
+    """Return the ternary viewport clip path definition."""
+    polygon = [p2c(point[0], point[1], A) for point in A.ternary_polygon]
+    path = " ".join(
+        f"{'M' if i == 0 else 'L'} {point[0]:g} {point[1]:g}"
+        for i, point in enumerate(polygon)
+    )
+    return f'<clipPath id="ternaryViewportClip"><path d="{path} Z"/></clipPath>'
 
-    out = ""
 
-    out += f'<svg viewBox="0 0 {A.width:.0f} {A.height:.0f}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
-
-    # Set up <defs> section, including our triangle marker, the keyline effect and our CSS
-
+def svg_defs(A: argparse.Namespace) -> str:
+    """Return SVG definitions, including marker, filter, CSS and clip paths."""
     css = DEFAULT_CSS
     if A.css:
         css = (A.css).read()
     css += "\n" + party_fill_css(A)
 
-    clip_path = ""
-    if A.chart_mode == "ternary":
-        polygon = [p2c(point[0], point[1], A) for point in A.ternary_polygon]
-        path = " ".join(
-            f"{'M' if i == 0 else 'L'} {point[0]:g} {point[1]:g}"
-            for i, point in enumerate(polygon)
-        )
-        clip_path = f'<clipPath id="ternaryViewportClip"><path d="{path} Z"/></clipPath>'
+    clip_path = ternary_clip_path(A) if A.chart_mode == "ternary" else ""
 
-    out += '<defs>' + \
+    return '<defs>' + \
         f'<marker id="triangle" viewBox="0 0 10 10" \
             refX="1" refY="5" \
             markerUnits="strokeWidth" \
@@ -873,15 +1007,10 @@ def construct_svg(A: argparse.Namespace) -> str:
         clip_path + \
         '</defs>'
 
-    # place a bg rect
 
-    out += f'<rect width="{A.width:.0f}" height="{A.height:.0f}" class="bg" />'
-
-    if A.chart_mode == "ternary":
-        out += '<g clip-path="url(#ternaryViewportClip)">'
-        out += draw_ternary_grid(A)
-
-    # place our dots
+def draw_winner_dots(A: argparse.Namespace) -> str:
+    """Draw the grid of winner dots for the selected chart mode."""
+    out = ""
 
     if A.chart_mode == "ternary":
         dot_pad = A.step
@@ -911,18 +1040,11 @@ def construct_svg(A: argparse.Namespace) -> str:
                     continue
                 out += construct_dot(b, g, A)
 
-    # Draw change-of-winner lines
-    out += draw_lines(A)
+    return out
 
-    # place points of interest
-    if A.input or A.point:
-        out += draw_pois(A)
 
-    if A.chart_mode == "ternary":
-        out += '</g>'
-
-    # Draw labels stating preference assumptions
-    out += '<g id="preflabel">'
+def draw_preference_legend(A: argparse.Namespace) -> str:
+    """Draw the preference-flow legend."""
     legend_lines = [
         f"{A.z_name} to {A.y_name}: {100.0*A.z_to_y:.1f}%",
         f"{A.z_name} to {A.x_name}: {100.0*A.z_to_x:.1f}%",
@@ -942,43 +1064,88 @@ def construct_svg(A: argparse.Namespace) -> str:
     legend_x = max(A.scale * 0.5, A.width - legend_width - legend_padding)
     legend_text_x = legend_x + legend_padding
 
+    out = '<g id="preflabel">'
     out += f'<rect width="{legend_width:g}" height="{legend_height:g}" x="{legend_x:g}" y="{A.scale:g}" class="bg"/>'
-    out += f'<text x="{legend_text_x:g}" y="{2*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[0])}</text>'
-    out += f'<text x="{legend_text_x:g}" y="{3*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[1])}</text>'
-    out += f'<text x="{legend_text_x:g}" y="{4*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[2])}</text>'
-    out += f'<text x="{legend_text_x:g}" y="{5*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[3])}</text>'
-    out += f'<text x="{legend_text_x:g}" y="{6*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[4])}</text>'
-    out += f'<text x="{legend_text_x:g}" y="{7*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(legend_lines[5])}</text>'
+    for i, line_text in enumerate(legend_lines, start=2):
+        out += f'<text x="{legend_text_x:g}" y="{i*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(line_text)}</text>'
     out += '</g>'
+    return out
+
+
+def draw_cartesian_axes(A: argparse.Namespace) -> str:
+    """Draw cartesian axes and labels."""
+    (x0, y0) = p2c(A.start, A.start,  A)
+    (x0, y100) = p2c(A.start, A.stop,   A)
+    (x100, y0) = p2c(A.stop,  A.start,  A)
+
+    out = ""
+
+    # Draw Y axis
+    out += f'<path d="M {x0:g} {A.height:g} V {y100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
+    out += f'<text transform="translate({(x0 - (A.offset - 1)*A.scale):g}, {A.height/2 :g}) rotate(270)" style="text-anchor:middle">{esc_text(A.y_name)} 3CP</text>'
+
+    for g in A.marks:
+        if g > A.start and g <= (A.stop):
+            (xpos, ypos) = p2c(A.start, g, A)
+            out += f'<path d="M {xpos:g} {ypos:g} h {-A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
+            out += f'<text y="{(ypos + A.scale/2):g}" x="{(xpos - 3*A.scale):g}" style="font-size:{A.scale:g}; text-anchor:right; text-align:middle">{g:.0%}</text>'
+
+    # Draw X axis
+    out += f'<path d="M {0:g} {y0:g} H {x100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
+    out += f'<text x="{A.width/2:g}" y="{y0 + 3.5*A.scale:g}" style="text-anchor:middle">{esc_text(A.x_name)} 3CP</text>'
+
+    for b in A.marks:
+        if b > A.start and b <= (A.stop):
+            (xpos, ypos) = p2c(b, A.start, A)
+            out += f'<path d="M {xpos:g} {ypos:g} v {A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
+            out += f'<text x="{xpos:g}" y="{ypos + 2*A.scale:g}" style="font-size:{A.scale}; text-anchor:middle">{b:.0%}</text>'
+
+    return out
+
+
+def construct_svg(A: argparse.Namespace) -> str:
+    """Returns an SVG of the graph for given parameters as specified in `A`."""
+    # let's output some SVG!
+
+    out = ""
+
+    out += f'<svg viewBox="0 0 {A.width:.0f} {A.height:.0f}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
+
+    # Set up <defs> section, including our triangle marker, the keyline effect and our CSS
+
+    out += svg_defs(A)
+
+    # place a bg rect
+
+    out += f'<rect width="{A.width:.0f}" height="{A.height:.0f}" class="bg" />'
+
+    if A.chart_mode == "ternary":
+        out += '<g clip-path="url(#ternaryViewportClip)">'
+        out += draw_ternary_grid(A)
+
+    # place our dots
+
+    out += draw_winner_dots(A)
+
+    # Draw change-of-winner lines
+    out += draw_lines(A)
+
+    # place points of interest
+    if A.input or A.point:
+        out += draw_pois(A)
+
+    if A.chart_mode == "ternary":
+        out += '</g>'
+
+    # Draw labels stating preference assumptions
+    out += draw_preference_legend(A)
 
     if A.chart_mode == "ternary":
         out += draw_ternary_frame(A)
         out += draw_ternary_grid_labels(A)
         out += draw_ternary_side_labels(A)
     else:
-        (x0, y0) = p2c(A.start, A.start,  A)
-        (x0, y100) = p2c(A.start, A.stop,   A)
-        (x100, y0) = p2c(A.stop,  A.start,  A)
-
-        # Draw Y axis
-        out += f'<path d="M {x0:g} {A.height:g} V {y100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
-        out += f'<text transform="translate({(x0 - (A.offset - 1)*A.scale):g}, {A.height/2 :g}) rotate(270)" style="text-anchor:middle">{esc_text(A.y_name)} 3CP</text>'
-
-        for g in A.marks:
-            if g > A.start and g <= (A.stop):
-                (xpos, ypos) = p2c(A.start, g, A)
-                out += f'<path d="M {xpos:g} {ypos:g} h {-A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
-                out += f'<text y="{(ypos + A.scale/2):g}" x="{(xpos - 3*A.scale):g}" style="font-size:{A.scale:g}; text-anchor:right; text-align:middle">{g:.0%}</text>'
-
-        # Draw X axis
-        out += f'<path d="M {0:g} {y0:g} H {x100:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px" marker-end="url(#triangle)"/>'
-        out += f'<text x="{A.width/2:g}" y="{y0 + 3.5*A.scale:g}" style="text-anchor:middle">{esc_text(A.x_name)} 3CP</text>'
-
-        for b in A.marks:
-            if b > A.start and b <= (A.stop):
-                (xpos, ypos) = p2c(b, A.start, A)
-                out += f'<path d="M {xpos:g} {ypos:g} v {A.scale:g}" style="stroke: #222; stroke-width: {A.scale * 0.2:g}px"/>'
-                out += f'<text x="{xpos:g}" y="{ypos + 2*A.scale:g}" style="font-size:{A.scale}; text-anchor:middle">{b:.0%}</text>'
+        out += draw_cartesian_axes(A)
 
     out += "\r\n<!-- Generated by https://abjago.net/3pp/ -->\r\n"
     out += "</svg>"
@@ -1081,149 +1248,15 @@ def get_args(args=None) -> argparse.Namespace:
 
 
 def validate_args(A: argparse.Namespace) -> argparse.Namespace:
-    # Canonical flow values (x/y/z) with legacy fallback aliases
-    if A.x_to_y is None:
-        A.x_to_y = A.blue_to_green
-    if A.x_to_z is None:
-        A.x_to_z = A.blue_to_red
-    if A.y_to_x is None:
-        A.y_to_x = A.green_to_blue
-    if A.y_to_z is None:
-        A.y_to_z = A.green_to_red
-    if A.z_to_x is None:
-        A.z_to_x = A.red_to_blue
-    if A.z_to_y is None:
-        A.z_to_y = A.red_to_green
-
-    # Keep legacy fields in sync for any downstream compatibility code
-    A.blue_to_green = A.x_to_y
-    A.blue_to_red = A.x_to_z
-    A.green_to_blue = A.y_to_x
-    A.green_to_red = A.y_to_z
-    A.red_to_blue = A.z_to_x
-    A.red_to_green = A.z_to_y
-
-    # Normalise labels and colours
-    A.x_name = (str(A.x_name).strip() or "Coalition")
-    A.y_name = (str(A.y_name).strip() or "Greens")
-    A.z_name = (str(A.z_name).strip() or "Labor")
-    A.x_colour = normalise_colour(A.x_colour, "#08e")
-    A.y_colour = normalise_colour(A.y_colour, "#0a2")
-    A.z_colour = normalise_colour(A.z_colour, "#d04")
+    apply_flow_defaults(A)
+    normalise_labels_and_colours(A)
 
     # Clamp A.step to be in a reasonable range
     A.step = max(min(abs(A.step), 0.05), 0.002)
 
-    if A.chart_mode == "cartesian":
-        # clamp A.start to be a usable range
-        A.start = max(min(abs(A.start), 0.5 - 10*A.step), 0.0)
-
-        # If (1 - A.stop) < A.start the graph gets wonky
-        A.stop = min(abs(A.stop), 1 - A.start)
-    else:
-        A.start = max(min(abs(A.start), 1.0), 0.0)
-        A.stop = max(min(abs(A.stop), 1.0), 0.0)
-
-    def normalise_bound(value, fallback):
-        if value is None:
-            value = fallback
-        return max(min(abs(value), 1.0), 0.0)
-
-    def normalise_bound_pair(lo, hi):
-        return (lo, max(lo, hi))
-
-    A.x_min, A.x_max = normalise_bound_pair(
-        normalise_bound(A.x_min, A.start),
-        normalise_bound(A.x_max, A.stop)
-    )
-    A.y_min, A.y_max = normalise_bound_pair(
-        normalise_bound(A.y_min, A.start),
-        normalise_bound(A.y_max, A.stop)
-    )
-
-    if A.chart_mode == "ternary":
-        z_min_default = A.start
-        z_max_default = A.stop
-    else:
-        z_min_default = 0.0
-        z_max_default = 1.0
-
-    A.z_min, A.z_max = normalise_bound_pair(
-        normalise_bound(A.z_min, z_min_default),
-        normalise_bound(A.z_max, z_max_default)
-    )
-
-    if A.chart_mode == "ternary":
-        if A.x_min + A.y_min + A.z_min > 1.0:
-            raise ValueError("minimum ternary bounds leave no valid points")
-        if A.x_max + A.y_max + A.z_max < 1.0:
-            raise ValueError("maximum ternary bounds leave no valid points")
-
-    # Calculate sizes...
-    if A.chart_mode == "ternary":
-        A.ternary_polygon = ternary_viewport_polygon(A)
-
-        area = 0.0
-        for i, point in enumerate(A.ternary_polygon):
-            next_point = A.ternary_polygon[(i + 1) % len(A.ternary_polygon)]
-            area += point[0] * next_point[1] - next_point[0] * point[1]
-        if len(A.ternary_polygon) < 3 or math.isclose(area, 0.0, abs_tol=1e-12):
-            raise ValueError("ternary bounds collapse to no drawable area")
-
-        raw_points = [ternary_raw_point(point[0], point[1], A)
-                      for point in A.ternary_polygon]
-        A.ternary_raw_min_x = min(point[0] for point in raw_points)
-        A.ternary_raw_max_x = max(point[0] for point in raw_points)
-        A.ternary_raw_min_y = min(point[1] for point in raw_points)
-        A.ternary_raw_max_y = max(point[1] for point in raw_points)
-        A.ternary_margin = max(A.offset * A.scale, A.scale * 12.0)
-        A.inner_width = A.ternary_raw_max_x - A.ternary_raw_min_x
-        A.width = A.inner_width + 2 * A.ternary_margin
-        A.height = (A.ternary_raw_max_y - A.ternary_raw_min_y) + 2 * A.ternary_margin
-        A.ternary_screen_polygon = [
-            p2c(point[0], point[1], A) for point in A.ternary_polygon
-        ]
-    else:
-        A.inner_width = A.scale * 100.0 * (A.stop - A.start)
-        A.width = (A.offset + 1) * A.scale + \
-            A.inner_width  # extra on right and top
-        A.height = A.width
-
-    # A.scale is pixels per percent, A.step is percent per dot
-    A.radius = 50.0 * A.scale * A.step
-
-    # Clamp our preference flows...
-
-    A.y_to_z = max(min(abs(A.y_to_z), 1.0), 0.0)
-    A.z_to_y = max(min(abs(A.z_to_y), 1.0), 0.0)
-    A.x_to_z = max(min(abs(A.x_to_z), 1.0), 0.0)
-    A.y_to_x = max(min(abs(A.y_to_x), 1.0), 0.0)
-    A.z_to_x = max(min(abs(A.z_to_x), 1.0), 0.0)
-    A.x_to_y = max(min(abs(A.x_to_y), 1.0), 0.0)
-
-    # ... and conditionally normalise them
-    z_total = A.z_to_y + A.z_to_x
-    if z_total > 1.0:
-        A.z_to_y /= z_total
-        A.z_to_x /= z_total
-
-    y_total = A.y_to_z + A.y_to_x
-    if y_total > 1.0:
-        A.y_to_z /= y_total
-        A.y_to_x /= y_total
-
-    x_total = A.x_to_y + A.x_to_z
-    if x_total > 1.0:
-        A.x_to_y /= x_total
-        A.x_to_z /= x_total
-
-    # Keep legacy aliases synced after normalisation
-    A.blue_to_green = A.x_to_y
-    A.blue_to_red = A.x_to_z
-    A.green_to_blue = A.y_to_x
-    A.green_to_red = A.y_to_z
-    A.red_to_blue = A.z_to_x
-    A.red_to_green = A.z_to_y
+    normalise_chart_bounds(A)
+    configure_canvas(A)
+    normalise_preference_flows(A)
 
     return A
 
