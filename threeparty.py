@@ -79,6 +79,38 @@ def make_args(query_dict):
     return visualise.validate_args(A)
 
 
+def download_filename(A):
+    """Return a deterministic SVG filename using canonical argument names."""
+    parts = [
+        "3pp_vis",
+        A.chart_mode,
+        f"x_to_y{A.x_to_y:g}",
+        f"x_to_z{A.x_to_z:g}",
+        f"y_to_x{A.y_to_x:g}",
+        f"y_to_z{A.y_to_z:g}",
+        f"z_to_x{A.z_to_x:g}",
+        f"z_to_y{A.z_to_y:g}",
+    ]
+
+    if A.chart_mode == "ternary":
+        parts.extend([
+            f"x_min{A.x_min:g}",
+            f"x_max{A.x_max:g}",
+            f"y_min{A.y_min:g}",
+            f"y_max{A.y_max:g}",
+            f"z_min{A.z_min:g}",
+            f"z_max{A.z_max:g}",
+        ])
+    else:
+        parts.extend([
+            f"start{A.start:g}",
+            f"stop{A.stop:g}",
+        ])
+
+    parts.append(f"step{A.step:g}")
+    return "_".join(parts) + ".svg"
+
+
 
 def application(env, start_response):
     head = ["200 OK", [("Content-Type", "image/svg+xml; charset=utf-8")]]
@@ -103,10 +135,7 @@ def application(env, start_response):
             head[1].append(
                 (
                     "Content-Disposition",
-                    (
-                        'download; filename="'
-                        + f"3pp_vis_g{A.green_to_red:g}_r{A.red_to_green:g}_b{A.blue_to_red:g}_f{A.start}_t{A.stop}_s{A.step}.svg"
-                    ),
+                    f'download; filename="{download_filename(A)}"',
                 )
             )
         else:
