@@ -100,6 +100,8 @@ The web form also supports client-side POI CSV import/export. CSV files use visi
 
 Imports replace the current POI rows, accept an optional `x,y,label` header, skip invalid rows, and report how many rows were skipped. Exports include only non-empty POI rows and download as `3pp-pois.csv`.
 
+The supported POI CSV format is deliberately scoped to `x,y,label`. A future ternary-specific format could add an optional Z column (`x,y,z,label`), with Z either validated against `100 - (x + y)` or derived when omitted. That format is not accepted yet; keeping the current CSV small avoids ambiguity while the web workflow settles.
+
 ### SVG output contract
 
 Generated SVGs embed party fill colours in CSS classes:
