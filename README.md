@@ -46,11 +46,30 @@ Legacy flow parameter names are still accepted:
 
 If both canonical and legacy forms are supplied, canonical `x/y/z` values take precedence.
 
+### Chart modes and bounds
+
+Two chart modes are available:
+
+- `--cartesian`: the default right-angle chart, with X on the horizontal axis, Y on the vertical axis, and Z as the balance (`1 - (x + y)`).
+- `--ternary`: an equilateral ternary chart, optionally truncated by bounds for all three parties.
+
+The explicit bounds are:
+
+- `--x-min`, `--x-max`
+- `--y-min`, `--y-max`
+- `--z-min`, `--z-max`
+
+All bounds are ratios from `0` to `1`. In cartesian mode, `--start` and `--stop` remain shorthand for the X and Y bounds, while Z defaults to `0..1`. In ternary mode, `--start` and `--stop` remain shorthand for all three `x/y/z` bounds unless an explicit bound is supplied.
+
+Ternary bounds must leave a drawable polygon. In practice, minimums cannot sum above `1`, and maximums cannot sum below `1`.
+
 #### Examples
 
 CLI:
 
     python3 visualise.py --x-name "Coalition" --y-name "Greens" --z-name "Labor" --x-to-y 0.3 --x-to-z 0.7 --y-to-x 0.2 --y-to-z 0.8 --z-to-x 0.2 --z-to-y 0.8 > out.svg
+
+    python3 visualise.py --ternary --x-min 0.2 --x-max 1 --y-min 0.2 --y-max 1 --z-min 0.2 --z-max 1 > out.svg
 
 WSGI/query string:
 
@@ -73,12 +92,39 @@ Example:
 
 Note: the web form accepts percentages, but converts them to decimal ratios (`0..1`) before request.
 
+The web form also supports client-side POI CSV import/export. CSV files use visible website units:
+
+    x,y,label
+    43,33,Ryan 2022
+    36,29,Brisbane sample
+
+Imports replace the current POI rows, accept an optional `x,y,label` header, skip invalid rows, and report how many rows were skipped. Exports include only non-empty POI rows and download as `3pp-pois.csv`.
+
+### SVG output contract
+
+Generated SVGs embed party fill colours in CSS classes:
+
+- `.x`: X-party winner dots
+- `.y`: Y-party winner dots
+- `.z`: Z-party winner dots
+
+Winner dots use these classes with the shared dot class, for example `class="x d"`. The old colour-role classes `.r`, `.g`, and `.b` are no longer emitted.
+
+### Download filenames
+
+WSGI downloads use deterministic filenames based on canonical parameters. The filename begins with `3pp_vis`, includes the chart mode and all six `x/y/z` flow parameters, then includes the relevant bounds:
+
+- cartesian: `start`, `stop`, and `step`
+- ternary: `x_min`, `x_max`, `y_min`, `y_max`, `z_min`, `z_max`, and `step`
+
+This keeps downloaded SVG filenames aligned with the public query-string contract.
+
 # README - WSGI
 
 This folder contains a WSGI application intended for use with uWSGI (`threeparty.py`), and corresponding configuration files.
 
 The script assumes the presence of a copy of this repository in the static website serve path `/var/www/SITE_NAME.tld/html/FOO`, such that
-- `https://SITE_NAME.tld/FOO/index.html` is where the requests come from
+- `https://SITE_NAME.tld/FOO/` is where the requests come from
   - (i.e. `create-index.py`'s `--site-root` is `https://SITE_NAME.tld/FOO`)
 
 ## Setup (for recent Debian/Ubuntu)

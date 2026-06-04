@@ -6,8 +6,9 @@ This repository generates and serves three-party-preferred (3PP) visualisations 
 ## Project map
 - `visualise.py`: primary logic for winner calculation, geometry, SVG generation, CLI argument parsing/validation.
 - `threeparty.py`: WSGI wrapper that maps query parameters to `visualise` arguments and returns SVG.
-- `index.html`: browser UI for setting preference flows and loading/downloading generated graphs.
-- `index_cpv.html`: alternate/static UI variant.
+- `index.md`: Jekyll page wrapper.
+- `form.html`: included browser UI for setting preference flows, POIs, chart mode, and loading/downloading generated graphs.
+- `index_cpv.html`, `visualise_cpv.py`: legacy CPV variants; avoid extending these unless explicitly requested.
 - `points.csv`: sample points-of-interest data source.
 - `nginx.conf`, `threeparty.ini`, `threeparty.service.conf`: deployment config examples.
 
@@ -15,9 +16,10 @@ This repository generates and serves three-party-preferred (3PP) visualisations 
 1. Read `README.md` plus any touched source files.
 2. Prefer minimal, localised changes; preserve existing query parameter names and defaults.
 3. For Python changes, run:
+   - `python3 -m unittest discover -s tests`
    - `python3 -m py_compile visualise.py threeparty.py`
    - `python3 visualise.py --step 0.02 --start 0.2 --stop 0.6 > /tmp/3pp.svg`
-4. If changing UI/query interactions, confirm `index.html` form fields still align with `threeparty.make_args()`.
+4. If changing UI/query interactions, confirm `form.html` form fields still align with `threeparty.make_args()`.
 
 ## Behavioural invariants to preserve
 - Preference flow pairs are expected to remain bounded and validated by `validate_args()`.
