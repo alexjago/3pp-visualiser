@@ -295,6 +295,8 @@ fieldset input[type="radio"] + label {
   <div id="buttons" width="100%;">
 <button type="button" class="btn btn-primary" style="justify-self: flex-start;" onclick="reloadGraph(); return false;">Reload
   Graph</button>
+<button type="button" class="btn" onclick="copyShareLink(); return false;">Copy Share
+  Link</button>
 <button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
   Graph</button>
   </div>
@@ -608,6 +610,42 @@ function reloadGraph() {
   if (!validateBeforeGraphAction()) return false;
   let search = buildSearchParams();
   document.getElementById("fillMe").setAttribute("src", "https://3pp.abjago.net/wsgi?" + search.toString())
+}
+
+function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+	return navigator.clipboard.writeText(text);
+  }
+
+  let textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  let copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  if (!copied) return Promise.reject(new Error("copy command failed"));
+  return Promise.resolve();
+}
+
+function copyShareLink() {
+  if (!validateBeforeGraphAction()) return false;
+
+  document.getElementById("dlinput").setAttribute("value", "");
+  let search = buildSearchParams();
+  search.delete("dl");
+  let url = "https://3pp.abjago.net/wsgi?" + search.toString();
+
+  copyTextToClipboard(url).then(() => {
+	formStatus.textContent = "Share link copied.";
+  }).catch(() => {
+	formStatus.textContent = url;
+  });
+
+  return false;
 }
 
 function downloadGraph() {
