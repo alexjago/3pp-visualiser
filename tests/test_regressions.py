@@ -252,6 +252,81 @@ class PoiTests(unittest.TestCase):
         self.assertIn("Bad&amp;#47;&amp;lt;name&amp;gt;", svg)
         self.assertNotIn("Bad/<name>", svg)
 
+    def test_poi_label_is_visible_and_svg_remains_parseable(self):
+        A = args([
+            "--step", "0.05",
+            "--start", "0.2",
+            "--stop", "0.6",
+            "--point", "0.43", "0.33", "Ryan 2022",
+        ])
+        svg = visualise.construct_svg(A)
+
+        parse_svg(svg)
+        self.assertIn('class="poi-label"', svg)
+        self.assertIn(">Ryan 2022</text>", svg)
+        self.assertIn('class="d poi"', svg)
+
+    def test_blank_poi_label_draws_marker_without_visible_label(self):
+        A = args([
+            "--step", "0.05",
+            "--start", "0.2",
+            "--stop", "0.6",
+            "--point", "0.43", "0.33", "",
+        ])
+        svg = visualise.construct_svg(A)
+
+        parse_svg(svg)
+        self.assertIn('class="d poi"', svg)
+        self.assertNotIn('class="poi-label"', svg)
+
+    def test_visible_poi_label_boxes_do_not_overlap(self):
+        A = args([
+            "--step", "0.05",
+            "--start", "0.2",
+            "--stop", "0.6",
+            "--point", "0.35", "0.35", "Alpha",
+            "--point", "0.35", "0.35", "Beta",
+            "--point", "0.35", "0.35", "Gamma",
+        ])
+        root = parse_svg(visualise.construct_svg(A))
+        rects = [
+            {
+                "x": float(rect.attrib["x"]),
+                "y": float(rect.attrib["y"]),
+                "width": float(rect.attrib["width"]),
+                "height": float(rect.attrib["height"]),
+            }
+            for group in root.iter()
+            if group.tag.endswith("g") and group.attrib.get("class") == "poi-label"
+            for rect in group
+            if rect.tag.endswith("rect")
+        ]
+
+        self.assertGreaterEqual(len(rects), 2)
+        for i, first in enumerate(rects):
+            for second in rects[i + 1:]:
+                self.assertFalse(visualise.boxes_overlap(first, second))
+
+    def test_ternary_poi_label_is_outside_clipped_marker_group(self):
+        A = args([
+            "--ternary",
+            "--step", "0.05",
+            "--x-min", "0.2", "--x-max", "1",
+            "--y-min", "0.2", "--y-max", "1",
+            "--z-min", "0.2", "--z-max", "1",
+            "--point", "0.4", "0.2", "Boundary sample",
+        ])
+        svg = visualise.construct_svg(A)
+
+        parse_svg(svg)
+        self.assertIn('clip-path="url(#ternaryViewportClip)"', svg)
+        self.assertIn('class="d poi"', svg)
+        self.assertIn('class="poi-label"', svg)
+        self.assertLess(
+            svg.index('class="d poi"'),
+            svg.index('</g><g class="poi-label"'),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

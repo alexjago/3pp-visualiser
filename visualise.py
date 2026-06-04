@@ -24,6 +24,8 @@ text.label {filter: url(#keylineEffect); font-weight: bold}
 .t {fill: #888}
 /* point of interest */
 .poi {stroke:#000; fill-opacity:0.4; stroke-width: 0.3%}
+.poi-label rect {fill:#fff; fill-opacity:0.86; stroke:#222; stroke-opacity:0.35; stroke-width:0.5px}
+.poi-label text {fill:#111}
 .line {stroke: #222; stroke-width: 0.5%; fill:none; stroke-linecap:round;}
 #triangle {fill: #222}
 .arrow {fill:none; stroke:#111; stroke-width:0.5%; stroke-dasharray:4 2; stroke-dashoffset:0;}
@@ -755,47 +757,140 @@ def draw_lines(A: argparse.Namespace) -> str:
     return f'\r\n<path d="{red_green} {red_blue} {blue_green} {top_right}" class="line" />\r\n'
 
 
-def draw_pois(A: argparse.Namespace) -> str:
-    """Draw points of interest, as appearing in the specified CSV file"""
+def parse_poi_row(row, A: argparse.Namespace):
+    """Parse and enrich a point-of-interest row for marker and label rendering."""
+    try:
+        blue_pct = float(row[0])
+        green_pct = float(row[1])
 
-    def inner(row):
+        if blue_pct + green_pct > 1.0:
+            raise ValueError("sum of X and Y columns must be <= 1")
+
+        label = row[2] if len(row) > 2 else ""
+        (x, y) = p2c(blue_pct, green_pct, A)
+        red_pct = 1 - (green_pct + blue_pct)
+        tooltip = f"{esc_text(label)}\n{party_name(Party.GREEN, A)}: {green_pct:.1%}, {party_name(Party.RED, A)}: {red_pct:.1%}, {party_name(Party.BLUE, A)}: {blue_pct:.1%}.".replace(
+            ".0%", "%")
+
         try:
-            r0 = float(row[0])
-            r1 = float(row[1])
-
-            if r0 + r1 > 1.0:
-                raise ValueError("sum of X and Y columns must be <= 1")
-
-            r2 = row[2] if len(row) > 2 else ""
-            (x, y) = p2c(r0, r1, A)
-            tooltip = f"{esc_text(r2)}\n{party_name(Party.GREEN, A)}: {r1:.1%}, {party_name(Party.RED, A)}: {(1 - (r1+r0)):.1%}, {party_name(Party.BLUE, A)}: {r0:.1%}.".replace(
+            (winner, margin) = calculate_winner(red_pct, green_pct, blue_pct, A)
+            tooltip += f"\nWinner: {party_name(winner, A)} {margin:.1%}".replace(
                 ".0%", "%")
+        except TypeError:  # ties A.n
+            tooltip += "\nWinner: TIE"
 
-            try:
-                (winner, margin) = calculate_winner(1 - (r0 + r1), r1, r0, A)
-                tooltip += f"\nWinner: {party_name(winner, A)} {margin:.1%}".replace(
-                    ".0%", "%")
-            except TypeError:  # ties A.n
-                tooltip += "\nWinner: TIE"
-            return  f'<circle cx="{x:g}" cy="{y:g}" r="{A.radius:g}" class="d poi"><title>{tooltip}</title></circle>\r\n'
+        return {
+            "x": x,
+            "y": y,
+            "label": str(label),
+            "escaped_label": esc_text(label),
+            "tooltip": tooltip,
+        }
 
-        except (TypeError, IndexError, ValueError) as e:
-            print("Could not parse input row:", e, file=sys.stderr)
-            print(row, file=sys.stderr)
-            return ''
+    except (TypeError, IndexError, ValueError) as e:
+        print("Could not parse input row:", e, file=sys.stderr)
+        print(row, file=sys.stderr)
+        return None
 
 
-    out = ""
+def parse_pois(A: argparse.Namespace):
+    """Return valid points of interest from query args and optional CSV input."""
+    pois = []
 
-    for row in A.point:
-        out += inner(row)
-        
+    for row in (A.point or []):
+        poi = parse_poi_row(row, A)
+        if poi:
+            pois.append(poi)
+
     if A.input:
         import csv
         rdr = csv.reader(sys.stdin if A.input == "-" else open(A.input, 'r'))
         for row in rdr:
-            out += inner(row)
-        
+            poi = parse_poi_row(row, A)
+            if poi:
+                pois.append(poi)
+
+    return pois
+
+
+def draw_poi_markers(pois, A: argparse.Namespace) -> str:
+    """Draw POI marker circles with tooltip details."""
+    out = ""
+    for poi in pois:
+        out += f'<circle cx="{poi["x"]:g}" cy="{poi["y"]:g}" r="{A.radius:g}" class="d poi"><title>{poi["tooltip"]}</title></circle>\r\n'
+    return out
+
+
+def boxes_overlap(a, b) -> bool:
+    """Return whether two screen-space boxes overlap."""
+    return not (
+        a["x"] + a["width"] <= b["x"] or
+        b["x"] + b["width"] <= a["x"] or
+        a["y"] + a["height"] <= b["y"] or
+        b["y"] + b["height"] <= a["y"]
+    )
+
+
+def label_candidates(poi, width: float, height: float, gap: float):
+    """Return deterministic candidate label boxes around a POI marker."""
+    x = poi["x"]
+    y = poi["y"]
+    return [
+        {"x": x + gap, "y": y - height / 2.0, "width": width, "height": height},
+        {"x": x + gap, "y": y - gap - height, "width": width, "height": height},
+        {"x": x + gap, "y": y + gap, "width": width, "height": height},
+        {"x": x - gap - width, "y": y - height / 2.0, "width": width, "height": height},
+        {"x": x - gap - width, "y": y - gap - height, "width": width, "height": height},
+        {"x": x - gap - width, "y": y + gap, "width": width, "height": height},
+        {"x": x - width / 2.0, "y": y - gap - height, "width": width, "height": height},
+        {"x": x - width / 2.0, "y": y + gap, "width": width, "height": height},
+    ]
+
+
+def box_inside_viewbox(box, A: argparse.Namespace) -> bool:
+    """Return whether a label box fits within the SVG viewBox."""
+    return (
+        box["x"] >= 0.0 and
+        box["y"] >= 0.0 and
+        box["x"] + box["width"] <= A.width and
+        box["y"] + box["height"] <= A.height
+    )
+
+
+def draw_poi_labels(pois, A: argparse.Namespace) -> str:
+    """Draw non-overlapping visible labels for labelled POIs."""
+    font_size = A.scale
+    padding = A.scale * 0.35
+    gap = A.radius + A.scale * 0.8
+    occupied = [preference_legend_box(A)]
+    out = ""
+
+    for poi in pois:
+        if not poi["label"].strip():
+            continue
+
+        text_width = len(poi["label"]) * font_size * 0.62
+        box_width = text_width + 2 * padding
+        box_height = font_size * 1.4
+        chosen = None
+
+        for candidate in label_candidates(poi, box_width, box_height, gap):
+            if not box_inside_viewbox(candidate, A):
+                continue
+            if any(boxes_overlap(candidate, box) for box in occupied):
+                continue
+            chosen = candidate
+            break
+
+        if not chosen:
+            continue
+
+        occupied.append(chosen)
+        text_x = chosen["x"] + padding
+        text_y = chosen["y"] + chosen["height"] / 2.0
+        out += f'<g class="poi-label"><rect x="{chosen["x"]:g}" y="{chosen["y"]:g}" width="{chosen["width"]:g}" height="{chosen["height"]:g}" rx="{padding:g}"/>'
+        out += f'<text x="{text_x:g}" y="{text_y:g}" style="font-size:{font_size:g}; dominant-baseline:middle">{poi["escaped_label"]}</text></g>\r\n'
+
     return out
 
 
@@ -1043,9 +1138,9 @@ def draw_winner_dots(A: argparse.Namespace) -> str:
     return out
 
 
-def draw_preference_legend(A: argparse.Namespace) -> str:
-    """Draw the preference-flow legend."""
-    legend_lines = [
+def preference_legend_lines(A: argparse.Namespace):
+    """Return preference-flow legend lines."""
+    return [
         f"{A.z_name} to {A.y_name}: {100.0*A.z_to_y:.1f}%",
         f"{A.z_name} to {A.x_name}: {100.0*A.z_to_x:.1f}%",
         f"{A.y_name} to {A.z_name}: {100.0*A.y_to_z:.1f}%",
@@ -1053,6 +1148,11 @@ def draw_preference_legend(A: argparse.Namespace) -> str:
         f"{A.x_name} to {A.z_name}: {100.0*A.x_to_z:.1f}%",
         f"{A.x_name} to {A.y_name}: {100.0*A.x_to_y:.1f}%",
     ]
+
+
+def preference_legend_box(A: argparse.Namespace):
+    """Return the screen-space preference legend box."""
+    legend_lines = preference_legend_lines(A)
 
     # Estimate text width and size legend box to prevent overflow with long names.
     # For the default sans-serif font, ~0.62 * font-size per character is a reasonable fit.
@@ -1062,10 +1162,23 @@ def draw_preference_legend(A: argparse.Namespace) -> str:
     legend_width = est_text_width + 2 * legend_padding
     legend_height = 6.5 * A.scale
     legend_x = max(A.scale * 0.5, A.width - legend_width - legend_padding)
-    legend_text_x = legend_x + legend_padding
+    return {
+        "x": legend_x,
+        "y": A.scale,
+        "width": legend_width,
+        "height": legend_height,
+    }
+
+
+def draw_preference_legend(A: argparse.Namespace) -> str:
+    """Draw the preference-flow legend."""
+    legend_lines = preference_legend_lines(A)
+    legend_box = preference_legend_box(A)
+    legend_padding = A.scale * 0.5
+    legend_text_x = legend_box["x"] + legend_padding
 
     out = '<g id="preflabel">'
-    out += f'<rect width="{legend_width:g}" height="{legend_height:g}" x="{legend_x:g}" y="{A.scale:g}" class="bg"/>'
+    out += f'<rect width="{legend_box["width"]:g}" height="{legend_box["height"]:g}" x="{legend_box["x"]:g}" y="{legend_box["y"]:g}" class="bg"/>'
     for i, line_text in enumerate(legend_lines, start=2):
         out += f'<text x="{legend_text_x:g}" y="{i*A.scale:g}" style="font-size:{A.scale:g}">{esc_text(line_text)}</text>'
     out += '</g>'
@@ -1118,6 +1231,7 @@ def construct_svg(A: argparse.Namespace) -> str:
     # place a bg rect
 
     out += f'<rect width="{A.width:.0f}" height="{A.height:.0f}" class="bg" />'
+    pois = parse_pois(A) if (A.input or A.point) else []
 
     if A.chart_mode == "ternary":
         out += '<g clip-path="url(#ternaryViewportClip)">'
@@ -1131,11 +1245,14 @@ def construct_svg(A: argparse.Namespace) -> str:
     out += draw_lines(A)
 
     # place points of interest
-    if A.input or A.point:
-        out += draw_pois(A)
+    if pois:
+        out += draw_poi_markers(pois, A)
 
     if A.chart_mode == "ternary":
         out += '</g>'
+
+    if pois:
+        out += draw_poi_labels(pois, A)
 
     # Draw labels stating preference assumptions
     out += draw_preference_legend(A)
