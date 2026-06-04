@@ -457,30 +457,49 @@ document.querySelectorAll('input[name="prefs"]').forEach((elem) => elem.addEvent
 }));
 
 var dlForm = document.forms['dlForm'];
+var preferenceAdjustmentWarnings = [];
+
+function rememberPreferenceAdjustment(sourceLabel, adjusted) {
+  if (qs('input[name="prefs"]:checked').value != "Optional") return;
+
+  preferenceAdjustmentWarnings = [
+	`${sourceLabel} optional preferences exceeded 100%, so the paired value was adjusted to ${adjusted.value}%.`
+  ];
+  formStatus.textContent = preferenceAdjustmentWarnings[0];
+}
 
 dlForm.addEventListener('change', (event) => {
   event.preventDefault();
   let c = (qs('input[name="prefs"]:checked').value == "Compulsory");
+  if ([xty, xtz, zty, ztx, ytz, ytx].includes(event.target)) {
+	preferenceAdjustmentWarnings = [];
+  }
   // maintain invariants:
   // compulsory pref: sum == 100
   // optional pref: sum <= 100
   if ((event.target == xty) && (c || ((+xty.value + (+xtz.value)) > 100))) {
 	xtz.value = 100 - xty.value
+	rememberPreferenceAdjustment(partyLabel(xName.value, "X"), xtz);
   }
   if ((event.target == xtz) && (c || ((+xtz.value + (+xty.value)) > 100))) {
 	xty.value = 100 - xtz.value
+	rememberPreferenceAdjustment(partyLabel(xName.value, "X"), xty);
   }
   if ((event.target == zty) && (c || ((+zty.value + (+ztx.value)) > 100))) {
 	ztx.value = 100 - zty.value
+	rememberPreferenceAdjustment(partyLabel(zName.value, "Z"), ztx);
   }
   if ((event.target == ztx) && (c || ((+ztx.value + (+zty.value)) > 100))) {
 	zty.value = 100 - ztx.value
+	rememberPreferenceAdjustment(partyLabel(zName.value, "Z"), zty);
   }
   if ((event.target == ytz) && (c || ((+ytz.value + (+ytx.value)) > 100))) {
 	ytx.value = 100 - ytz.value
+	rememberPreferenceAdjustment(partyLabel(yName.value, "Y"), ytx);
   }
   if ((event.target == ytx) && (c || ((+ytx.value + (+ytz.value)) > 100))) {
 	ytz.value = 100 - ytx.value
+	rememberPreferenceAdjustment(partyLabel(yName.value, "Y"), ytz);
   }
 });
 
@@ -489,6 +508,7 @@ function buildSearchParams() {
   let search = new URLSearchParams();
   for (let [key, value] of fd.entries()) {
 	if (key == "prefs") continue;
+	if (value === "") continue;
 	if (percentParams.has(key) && value !== "") {
 	  let n = Number(value);
 	  if (Number.isFinite(n)) {
@@ -587,7 +607,8 @@ function validatePOITable() {
 function validateBeforeGraphAction() {
   let messages = [
 	...validateTernaryBounds(),
-	...validatePreferenceRows()
+	...validatePreferenceRows(),
+	...preferenceAdjustmentWarnings
   ];
   let poiValidation = validatePOITable();
   messages.push(...poiValidation.messages);
