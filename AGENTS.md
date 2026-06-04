@@ -8,7 +8,6 @@ This repository generates and serves three-party-preferred (3PP) visualisations 
 - `threeparty.py`: WSGI wrapper that maps query parameters to `visualise` arguments and returns SVG.
 - `index.md`: Jekyll page wrapper.
 - `form.html`: included browser UI for setting preference flows, POIs, chart mode, and loading/downloading generated graphs.
-- `index_cpv.html`, `visualise_cpv.py`: legacy CPV variants; avoid extending these unless explicitly requested.
 - `points.csv`: sample points-of-interest data source.
 - `nginx.conf`, `threeparty.ini`, `threeparty.service.conf`: deployment config examples.
 
