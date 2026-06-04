@@ -76,6 +76,23 @@ fieldset input[type="radio"] + label {
   width: 7ch;
 }
 
+#poi-controls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  align-items: baseline;
+  margin-left: 1em;
+}
+
+#poi-controls button {
+  margin: 0;
+}
+
+#poi-status {
+  margin-top: 0.4em;
+  color: #555;
+}
+
 #iwrap {
   position: relative;
   min-height: min(78vh, 48rem);
@@ -236,8 +253,16 @@ fieldset input[type="radio"] + label {
   </fieldset>
   <br />
   <fieldset>
-	<legend>Add Points of Interest <button type="button" onclick="addPOIRow()" style="margin: 0em 1em">+</button>
+	<legend>Add Points of Interest
+	  <span id="poi-controls">
+		<button type="button" onclick="addPOIRow()">+</button>
+		<button type="button" onclick="qs('#poi-import-file').click()">Import CSV</button>
+		<button type="button" onclick="exportPOICSV()">Export CSV</button>
+		<button type="button" onclick="clearPOIRows()">Clear</button>
+	  </span>
 	</legend>
+	<input type="file" id="poi-import-file" accept=".csv,text/csv" hidden>
+	<div id="poi-status" aria-live="polite"></div>
 	<table id="poitable">
 	  <thead>
 		<tr>
@@ -300,6 +325,8 @@ var shorthandOptions = qs("#shorthand-options");
 var shorthandInputs = shorthandOptions.querySelectorAll('input[type="number"]');
 var ternaryBounds = qs("#ternary-bounds");
 var ternaryBoundInputs = ternaryBounds.querySelectorAll('input');
+var poiImportFile = qs("#poi-import-file");
+var poiStatus = qs("#poi-status");
 var matchupModePreferences = {
   "Greens": {
 	y_to_z: 80,
@@ -398,6 +425,7 @@ zName.addEventListener("input", syncPartyLabels);
 yColour.addEventListener("input", syncMatchupModeButtons);
 matchupModeButtons.forEach((button) => button.addEventListener("click", () => setYPartyMode(button)));
 chartModeInputs.forEach((input) => input.addEventListener("change", syncChartModeOptions));
+poiImportFile.addEventListener("change", importPOICSV);
 
 document.querySelectorAll('input[name="prefs"]').forEach((elem) => elem.addEventListener('change', (event) => {
   event.preventDefault();
@@ -477,17 +505,34 @@ function downloadGraph() {
   return false;
 }
 
-function addPOIRow() {
-  var ttt = qs("#poitable")
+function poiInput(type, name, value) {
+  let input = document.createElement("input");
+  input.type = type;
+  input.name = name;
+  input.setAttribute("optional", "");
+  if (type == "number") {
+	input.min = "0";
+	input.max = "100";
+	input.step = "0.1";
+  }
+  if (name == "px") input.placeholder = "43";
+  if (name == "py") input.placeholder = "33";
+  if (name == "pl") input.placeholder = "Ryan 2022";
+  if (value !== undefined) input.value = value;
+  return input;
+}
+
+function addPOIRow(values = {}) {
+  var ttt = qs("#poitable tbody")
   var row = ttt.insertRow(-1)
   var px = row.insertCell(0)
   var py = row.insertCell(1)
   var pl = row.insertCell(2)
   var delb = row.insertCell(3)
 
-  px.innerHTML = '<input type="number" min="0" max="100" step="0.1" name="px" >'
-  py.innerHTML = '<input type="number" min="0" max="100" step="0.1" name="py" >'
-  pl.innerHTML = '<input type="text" name="pl" >'
+  px.appendChild(poiInput("number", "px", values.px));
+  py.appendChild(poiInput("number", "py", values.py));
+  pl.appendChild(poiInput("text", "pl", values.pl));
 
   delb.innerHTML = '<button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">-</button>'
 }
@@ -495,6 +540,161 @@ function addPOIRow() {
 function deletePOIRow(btn) {
   var row = btn.parentNode.parentNode;
   row.parentNode.removeChild(row);
+  if (!qs("#poitable tbody").rows.length) addPOIRow();
+}
+
+function getPOIRows() {
+  return Array.from(qs("#poitable tbody").rows).map((row) => ({
+	px: row.querySelector('input[name="px"]').value.trim(),
+	py: row.querySelector('input[name="py"]').value.trim(),
+	pl: row.querySelector('input[name="pl"]').value
+  })).filter((row) => row.px != "" || row.py != "" || row.pl.trim() != "");
+}
+
+function setPOIRows(rows) {
+  let tbody = qs("#poitable tbody");
+  tbody.replaceChildren();
+  if (!rows.length) {
+	addPOIRow();
+	return;
+  }
+  rows.forEach((row) => addPOIRow(row));
+}
+
+function clearPOIRows() {
+  setPOIRows([]);
+  showPOIStatus("POIs cleared.");
+}
+
+function showPOIStatus(message) {
+  poiStatus.textContent = message;
+}
+
+function parseCSV(text) {
+  let rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i++) {
+	let ch = text[i];
+	if (quoted) {
+	  if (ch == '"') {
+		if (text[i + 1] == '"') {
+		  field += '"';
+		  i++;
+		} else {
+		  quoted = false;
+		}
+	  } else {
+		field += ch;
+	  }
+	} else if (ch == '"') {
+	  if (field == "") {
+		quoted = true;
+	  } else {
+		field += ch;
+	  }
+	} else if (ch == ",") {
+	  row.push(field);
+	  field = "";
+	} else if (ch == "\r" || ch == "\n") {
+	  row.push(field);
+	  rows.push(row);
+	  row = [];
+	  field = "";
+	  if (ch == "\r" && text[i + 1] == "\n") i++;
+	} else {
+	  field += ch;
+	}
+  }
+
+  if (quoted) throw new Error("unterminated quoted field");
+  if (field != "" || row.length) {
+	row.push(field);
+	rows.push(row);
+  }
+  return rows;
+}
+
+function formatCSV(rows) {
+  function cell(value) {
+	let text = String(value ?? "");
+	if (/[",\r\n]/.test(text)) {
+	  return `"${text.replace(/"/g, '""')}"`;
+	}
+	return text;
+  }
+  return [["x", "y", "label"], ...rows.map((row) => [row.px, row.py, row.pl])]
+	.map((row) => row.map(cell).join(","))
+	.join("\r\n") + "\r\n";
+}
+
+function validPOINumber(value) {
+  if (value == "") return false;
+  let n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 100;
+}
+
+function importPOICSV(event) {
+  let file = event.target.files[0];
+  if (!file) return;
+
+  file.text().then((text) => {
+	text = text.replace(/^\uFEFF/, "");
+	let csvRows;
+	try {
+	  csvRows = parseCSV(text);
+	} catch (e) {
+	  showPOIStatus(`Import failed: ${e.message}.`);
+	  return;
+	} finally {
+	  poiImportFile.value = "";
+	}
+
+	if (csvRows.length &&
+	  (csvRows[0][0] || "").trim().toLowerCase() == "x" &&
+	  (csvRows[0][1] || "").trim().toLowerCase() == "y") {
+	  csvRows.shift();
+	}
+
+	let validRows = [];
+	let skipped = 0;
+	csvRows.forEach((row) => {
+	  if (row.every((cell) => (cell || "").trim() == "")) return;
+
+	  let px = (row[0] || "").trim();
+	  let py = (row[1] || "").trim();
+	  let pl = row.slice(2).join(",");
+	  if (!validPOINumber(px) || !validPOINumber(py) || Number(px) + Number(py) > 100) {
+		skipped++;
+		return;
+	  }
+	  validRows.push({px, py, pl});
+	});
+
+	setPOIRows(validRows);
+	let message = `Imported ${validRows.length} POI${validRows.length == 1 ? "" : "s"}.`;
+	if (skipped) message += ` Skipped ${skipped} invalid row${skipped == 1 ? "" : "s"}.`;
+	showPOIStatus(message);
+  }).catch((e) => {
+	poiImportFile.value = "";
+	showPOIStatus(`Import failed: ${e.message}.`);
+  });
+}
+
+function exportPOICSV() {
+  let rows = getPOIRows();
+  let blob = new Blob([formatCSV(rows)], {type: "text/csv"});
+  let url = URL.createObjectURL(blob);
+  let link = document.createElement("a");
+  link.href = url;
+  link.download = "3pp-pois.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showPOIStatus(`Exported ${rows.length} POI${rows.length == 1 ? "" : "s"}.`);
 }
 
 // addPOIRow();
