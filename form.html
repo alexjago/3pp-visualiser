@@ -207,24 +207,29 @@ fieldset input[type="radio"] + label {
 		<tr>
 		  <th>Party</th>
 		  <th>Minimum</th>
-		  <th>Maximum</th>
 		</tr>
 	  </thead>
 	  <tbody>
 		<tr>
 		  <th scope="row" id="x_bound_name">Coalition</th>
-		  <td><input type="number" min="0" max="100" step="0.1" name="x_min" id="x_min" placeholder="20" disabled></td>
-		  <td><input type="number" min="0" max="100" step="0.1" name="x_max" id="x_max" placeholder="60" disabled></td>
+		  <td>
+			<input type="number" min="0" max="100" step="0.1" value="20" name="x_min" id="x_min" disabled>
+			<input type="hidden" name="x_max" id="x_max" value="100" disabled>
+		  </td>
 		</tr>
 		<tr>
 		  <th scope="row" id="y_bound_name">Greens</th>
-		  <td><input type="number" min="0" max="100" step="0.1" name="y_min" id="y_min" placeholder="20" disabled></td>
-		  <td><input type="number" min="0" max="100" step="0.1" name="y_max" id="y_max" placeholder="60" disabled></td>
+		  <td>
+			<input type="number" min="0" max="100" step="0.1" value="20" name="y_min" id="y_min" disabled>
+			<input type="hidden" name="y_max" id="y_max" value="100" disabled>
+		  </td>
 		</tr>
 		<tr>
 		  <th scope="row" id="z_bound_name">Labor</th>
-		  <td><input type="number" min="0" max="100" step="0.1" name="z_min" id="z_min" placeholder="20" disabled></td>
-		  <td><input type="number" min="0" max="100" step="0.1" name="z_max" id="z_max" placeholder="60" disabled></td>
+		  <td>
+			<input type="number" min="0" max="100" step="0.1" value="20" name="z_min" id="z_min" disabled>
+			<input type="hidden" name="z_max" id="z_max" value="100" disabled>
+		  </td>
 		</tr>
 	  </tbody>
 	</table>
@@ -294,7 +299,7 @@ var chartModeInputs = document.querySelectorAll('input[name="chart_mode"]');
 var shorthandOptions = qs("#shorthand-options");
 var shorthandInputs = shorthandOptions.querySelectorAll('input[type="number"]');
 var ternaryBounds = qs("#ternary-bounds");
-var ternaryBoundInputs = ternaryBounds.querySelectorAll('input[type="number"]');
+var ternaryBoundInputs = ternaryBounds.querySelectorAll('input');
 var matchupModePreferences = {
   "Greens": {
 	y_to_z: 80,
