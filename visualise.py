@@ -860,7 +860,7 @@ def draw_poi_labels(pois, A: argparse.Namespace) -> str:
     """Draw non-overlapping visible labels for labelled POIs."""
     font_size = A.scale
     padding = A.scale * 0.35
-    gap = A.radius + A.scale * 0.8
+    gap = A.radius * 0.5
     occupied = [preference_legend_box(A)]
     out = ""
 
