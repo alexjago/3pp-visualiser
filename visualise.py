@@ -24,8 +24,7 @@ text.label {filter: url(#keylineEffect); font-weight: bold}
 .t {fill: #888}
 /* point of interest */
 .poi {stroke:#000; fill-opacity:0.4; stroke-width: 0.3%}
-.poi-label rect {fill:#fff; fill-opacity:0.86; stroke:#222; stroke-opacity:0.35; stroke-width:0.5px}
-.poi-label text {fill:#111}
+.poi-label text {fill:#111; stroke:#fff; stroke-width:5px; paint-order:stroke fill markers; stroke-linejoin:round}
 .line {stroke: #222; stroke-width: 0.5%; fill:none; stroke-linecap:round;}
 #triangle {fill: #222}
 .arrow {fill:none; stroke:#111; stroke-width:0.5%; stroke-dasharray:4 2; stroke-dashoffset:0;}
@@ -888,8 +887,7 @@ def draw_poi_labels(pois, A: argparse.Namespace) -> str:
         occupied.append(chosen)
         text_x = chosen["x"] + padding
         text_y = chosen["y"] + chosen["height"] / 2.0
-        out += f'<g class="poi-label"><rect x="{chosen["x"]:g}" y="{chosen["y"]:g}" width="{chosen["width"]:g}" height="{chosen["height"]:g}" rx="{padding:g}"/>'
-        out += f'<text x="{text_x:g}" y="{text_y:g}" style="font-size:{font_size:g}; dominant-baseline:middle">{poi["escaped_label"]}</text></g>\r\n'
+        out += f'<g class="poi-label"><text x="{text_x:g}" y="{text_y:g}" style="font-size:{font_size:g}; dominant-baseline:middle">{poi["escaped_label"]}</text></g>\r\n'
 
     return out
 

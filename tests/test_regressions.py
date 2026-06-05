@@ -264,6 +264,7 @@ class PoiTests(unittest.TestCase):
         parse_svg(svg)
         self.assertIn('class="poi-label"', svg)
         self.assertIn(">Ryan 2022</text>", svg)
+        self.assertIn("paint-order:stroke fill markers", svg)
         self.assertIn('class="d poi"', svg)
 
     def test_blank_poi_label_draws_marker_without_visible_label(self):
@@ -289,23 +290,27 @@ class PoiTests(unittest.TestCase):
             "--point", "0.35", "0.35", "Gamma",
         ])
         root = parse_svg(visualise.construct_svg(A))
-        rects = [
+        boxes = [
             {
-                "x": float(rect.attrib["x"]),
-                "y": float(rect.attrib["y"]),
-                "width": float(rect.attrib["width"]),
-                "height": float(rect.attrib["height"]),
+                "x": float(text.attrib["x"]) - A.scale * 0.35,
+                "y": float(text.attrib["y"]) - (A.scale * 1.4) / 2.0,
+                "width": len(text.text) * A.scale * 0.62 + 2 * A.scale * 0.35,
+                "height": A.scale * 1.4,
             }
             for group in root.iter()
             if group.tag.endswith("g") and group.attrib.get("class") == "poi-label"
-            for rect in group
-            if rect.tag.endswith("rect")
+            for text in group
+            if text.tag.endswith("text")
         ]
 
-        self.assertGreaterEqual(len(rects), 2)
-        for i, first in enumerate(rects):
-            for second in rects[i + 1:]:
+        self.assertGreaterEqual(len(boxes), 2)
+        for i, first in enumerate(boxes):
+            for second in boxes[i + 1:]:
                 self.assertFalse(visualise.boxes_overlap(first, second))
+
+        for group in root.iter():
+            if group.tag.endswith("g") and group.attrib.get("class") == "poi-label":
+                self.assertFalse(any(child.tag.endswith("rect") for child in group))
 
     def test_ternary_poi_label_is_outside_clipped_marker_group(self):
         A = args([
