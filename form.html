@@ -409,18 +409,18 @@ fieldset input[type="radio"] + label {
 		  <td data-label="Label">
 			<input type="text" name="pl" optional="" placeholder="Ryan 2022">
 		  </td>
-		  <td><button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">-</button></td>
+		  <td><button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">&minus;</button></td>
 		</tr>
 	  </tbody>
 	</table>
   </fieldset>
   <br />
   <div id="buttons" width="100%;">
-<button type="button" class="btn btn-primary" style="justify-self: flex-start;" onclick="reloadGraph(); return false;">Reload
+<button type="button" class="button-primary" style="justify-self: flex-start;" onclick="reloadGraph(); return false;">Reload
   Graph</button>
-<button type="button" class="btn" onclick="copyShareLink(); return false;">Copy Share
+<button type="button" class="button" onclick="copyShareLink(); return false;">Copy Share
   Link</button>
-<button type="button" class="btn" style="justify-self: flex-end;" onclick="downloadGraph()">Download
+<button type="button" class="button" style="justify-self: flex-end;" onclick="downloadGraph()">Download
   Graph</button>
   </div>
   <div id="form-status" aria-live="polite"></div>
@@ -870,7 +870,7 @@ function addPOIRow(values = {}) {
   py.appendChild(poiInput("number", "py", values.py));
   pl.appendChild(poiInput("text", "pl", values.pl));
 
-  delb.innerHTML = '<button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">-</button>'
+  delb.innerHTML = '<button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">&minus;</button>'
 }
 
 function deletePOIRow(btn) {
