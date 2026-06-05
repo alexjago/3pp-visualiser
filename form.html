@@ -645,13 +645,35 @@ function buildSearchParams() {
 	if (percentParams.has(key) && value !== "") {
 	  let n = Number(value);
 	  if (Number.isFinite(n)) {
-		search.append(key, (n / 100).toString());
+		search.append(key, compactRatio(n / 100));
 		continue;
 	  }
 	}
 	search.append(key, value);
   }
   return search;
+}
+
+function compactRatio(value) {
+  return Number(value.toPrecision(12)).toString();
+}
+
+function graphURL(search) {
+  return "https://3pp.abjago.net/wsgi?" + search.toString();
+}
+
+function longURLWarning(url) {
+  if (url.length <= 3500) return "";
+  if (url.length <= 8000) {
+	return ` This graph URL is ${url.length} characters; large POI sets may exceed server or proxy limits. Export POIs as CSV if sharing fails.`;
+  }
+  return ` This graph URL is ${url.length} characters and is likely too long for reliable GET requests. Export POIs as CSV or reduce the POI set.`;
+}
+
+function showLongURLWarning(url) {
+  let warning = longURLWarning(url);
+  if (!warning) return;
+  formStatus.textContent = [formStatus.textContent, warning.trim()].filter(Boolean).join(" ");
 }
 
 function numberFromInput(input) {
@@ -763,7 +785,9 @@ function validateBeforeGraphAction() {
 function reloadGraph() {
   if (!validateBeforeGraphAction()) return false;
   let search = buildSearchParams();
-  document.getElementById("fillMe").setAttribute("src", "https://3pp.abjago.net/wsgi?" + search.toString())
+  let url = graphURL(search);
+  document.getElementById("fillMe").setAttribute("src", url);
+  showLongURLWarning(url);
 }
 
 function copyTextToClipboard(text) {
@@ -791,10 +815,10 @@ function copyShareLink() {
   document.getElementById("dlinput").setAttribute("value", "");
   let search = buildSearchParams();
   search.delete("dl");
-  let url = "https://3pp.abjago.net/wsgi?" + search.toString();
+  let url = graphURL(search);
 
   copyTextToClipboard(url).then(() => {
-	formStatus.textContent = "Share link copied.";
+	formStatus.textContent = "Share link copied." + longURLWarning(url);
   }).catch(() => {
 	formStatus.textContent = url;
   });
@@ -806,7 +830,9 @@ function downloadGraph() {
   if (!validateBeforeGraphAction()) return false;
   document.getElementById("dlinput").setAttribute("value", "true");
   let search = buildSearchParams();
-  window.open("https://3pp.abjago.net/wsgi?" + search.toString())
+  let url = graphURL(search);
+  window.open(url)
+  showLongURLWarning(url);
   document.getElementById("dlinput").setAttribute("value", "");
   return false;
 }
