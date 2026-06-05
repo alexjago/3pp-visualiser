@@ -44,8 +44,8 @@ fieldset input[type="radio"] + label {
 }
 
 #matchup-modes button {
-  margin-right: 0.4em;
-  margin-bottom: 0.2em;
+  font-size: 0.85em;
+  margin-inline-end: 0.5em;
 }
 
 #matchup-modes button[aria-pressed="true"] {
@@ -115,15 +115,134 @@ fieldset input[type="radio"] + label {
 }
 
 @media (max-width: 40em) {
+  #dlForm {
+	box-sizing: border-box;
+	display: block;
+	width: 100%;
+  }
+
+  #dlForm fieldset {
+	min-width: 0;
+  }
+
+  #dlForm table {
+	display: block;
+	max-width: 100%;
+	overflow-x: auto;
+  }
+
+  #dlForm [hidden] {
+	display: none !important;
+  }
+
+  #dlForm #preferences-table {
+	display: table;
+	table-layout: fixed;
+	width: 100%;
+  }
+
+  #preferences-table th,
+  #preferences-table td {
+	padding-inline: 0.25em;
+  }
+
+  #preferences-table th {
+	font-size: 0.8em;
+  }
+
+  #preferences-table input[type="number"] {
+	box-sizing: border-box;
+	max-width: 100%;
+	width: 3.5em;
+  }
+
+  #matchup-table tbody,
+  #matchup-table tr {
+	display: block;
+  }
+
+  #matchup-table tr {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	align-items: baseline;
+  }
+
+  #matchup-table td {
+	padding-inline: 0.35em;
+  }
+
   #matchup-table input[type="text"] {
-	width: 22ch;
-	max-width: 45vw;
+	box-sizing: border-box;
+	width: 100%;
   }
 
   #matchup-modes {
 	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
+	flex-wrap: wrap;
+	gap: 0.35em;
+  }
+
+  #matchup-modes button {
+	margin-inline-end: 0;
+  }
+
+  #matchup-modes-row {
+	display: block;
+  }
+
+  #matchup-modes {
+	box-sizing: border-box;
+	width: 100%;
+  }
+
+  #graph-options label,
+  #graph-options input {
+	display: block;
+  }
+
+  #graph-options input {
+	margin-block-end: 0.5em;
+  }
+
+  #graph-options input[type="radio"],
+  #graph-options input[type="radio"] + label {
+	display: inline-block;
+  }
+
+  #graph-options input[type="radio"] {
+	margin-block-end: 0;
+  }
+
+  #poitable thead {
+	display: none;
+  }
+
+  #poitable tbody,
+  #poitable tr,
+  #poitable td {
+	display: block;
+  }
+
+  #poitable td {
+	padding-inline: 0;
+  }
+
+  #poitable td::before {
+	content: attr(data-label);
+	display: block;
+	font-weight: bold;
+  }
+
+  #poitable input {
+	box-sizing: border-box;
+	width: 100%;
+  }
+
+  #buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5em;
+	justify-content: space-between;
   }
 
   #iwrap {
@@ -141,14 +260,10 @@ fieldset input[type="radio"] + label {
 		  <td><input type="color" value="#0088ee" name="x_colour" id="x_colour"></td>
 		  <td class="role-note">(X axis)</td>
 		</tr>
-		<tr>
+		<tr id="y-matchup-row">
 		  <td><input type="text" value="Greens" name="y_name" id="y_name"></td>
 		  <td><input type="color" value="#00aa22" name="y_colour" id="y_colour"></td>
 		  <td class="role-note">(Y axis)</td>
-		  <td id="matchup-modes" aria-label="Y-axis party presets">
-			<button type="button" data-y-name="Greens" data-y-colour="#00aa22" aria-pressed="true">Greens mode</button>
-			<button type="button" data-y-name="One Nation" data-y-colour="#ff8000" aria-pressed="false">One Nation mode</button>
-		  </td>
 		</tr>
 		<tr>
 		  <td><input type="text" value="Labor" name="z_name" id="z_name"></td>
@@ -156,13 +271,21 @@ fieldset input[type="radio"] + label {
 		  <td class="role-note">(Balance)</td>
 		</tr>
 	  </tbody>
+	  <tfoot>
+		<tr id="matchup-modes-row">
+		  <td colspan="4" id="matchup-modes" aria-label="Y-axis party presets">
+			<button type="button" data-y-name="Greens" data-y-colour="#00aa22" aria-pressed="true">Greens</button>
+			<button type="button" data-y-name="One Nation" data-y-colour="#ff8000" aria-pressed="false">One Nation</button>
+		  </td>
+		</tr>
+	  </tfoot>
 	</table>
   </fieldset>
   <br />
   <fieldset>
 	<legend>Select preference flow rates (%)</legend>
 
-	<table>
+	<table id="preferences-table">
 	  <thead>
 		<tr>
 		  <th>&nbsp;</th>
@@ -206,7 +329,7 @@ fieldset input[type="radio"] + label {
 	<label for="prefs_optional">Optional preferential</label>
   </fieldset>
   <br />
-  <fieldset>
+  <fieldset id="graph-options">
 	<legend>Set graph layout options (%)</legend>
 	<input type="radio" name="chart_mode" id="chart_mode_cartesian" value="cartesian" checked>
 	<label for="chart_mode_cartesian">Cartesian</label>
@@ -279,11 +402,11 @@ fieldset input[type="radio"] + label {
 	  </thead>
 	  <tbody>
 		<tr>
-		  <td><input type="number" min="0" max="100" step="0.1" name="px" optional="" placeholder="43"></td>
-		  <td>
+		  <td data-label="X vote (%)"><input type="number" min="0" max="100" step="0.1" name="px" optional="" placeholder="43"></td>
+		  <td data-label="Y vote (%)">
 			<input type="number" min="0" max="100" step="0.1" name="py" optional="" placeholder="33">
 		  </td>
-		  <td>
+		  <td data-label="Label">
 			<input type="text" name="pl" optional="" placeholder="Ryan 2022">
 		  </td>
 		  <td><button type="button" onclick="deletePOIRow(this)" style="margin: 0em 1em">-</button></td>
@@ -328,6 +451,10 @@ var yName = qs("#y_name");
 var zName = qs("#z_name");
 var yColour = qs("#y_colour");
 var matchupModeButtons = document.querySelectorAll("#matchup-modes button");
+var matchupModes = qs("#matchup-modes");
+var matchupModesRow = qs("#matchup-modes-row");
+var yMatchupRow = qs("#y-matchup-row");
+var matchupModesInline = window.matchMedia("(min-width: 40.001em)");
 var chartModeInputs = document.querySelectorAll('input[name="chart_mode"]');
 var shorthandOptions = qs("#shorthand-options");
 var shorthandInputs = shorthandOptions.querySelectorAll('input[type="number"]');
@@ -410,6 +537,10 @@ function setYPartyMode(button) {
   syncMatchupModeButtons();
 }
 
+function placeMatchupModes() {
+  (matchupModesInline.matches ? yMatchupRow : matchupModesRow).appendChild(matchupModes);
+}
+
 function syncChartModeOptions() {
   let ternary = qs('input[name="chart_mode"]:checked').value == "ternary";
   shorthandOptions.hidden = ternary;
@@ -422,6 +553,8 @@ function syncChartModeOptions() {
   });
 }
 
+placeMatchupModes();
+matchupModesInline.addEventListener("change", placeMatchupModes);
 syncPartyLabels();
 syncMatchupModeButtons();
 syncChartModeOptions();
@@ -702,6 +835,10 @@ function addPOIRow(values = {}) {
   var py = row.insertCell(1)
   var pl = row.insertCell(2)
   var delb = row.insertCell(3)
+
+  px.dataset.label = "X vote (%)"
+  py.dataset.label = "Y vote (%)"
+  pl.dataset.label = "Label"
 
   px.appendChild(poiInput("number", "px", values.px));
   py.appendChild(poiInput("number", "py", values.py));
