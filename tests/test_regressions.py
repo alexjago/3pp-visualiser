@@ -329,7 +329,11 @@ class PoiTests(unittest.TestCase):
         self.assertIn('class="poi-label"', svg)
         self.assertLess(
             svg.index('class="d poi"'),
-            svg.index('</g><g class="poi-label"'),
+            svg.index('class="poi-label"'),
+        )
+        self.assertLess(
+            svg.index('class="axis"'),
+            svg.index('class="poi-label"'),
         )
 
 
